@@ -36,6 +36,17 @@
     #panel h3::after { content:""; flex:1; height:1px; background:linear-gradient(90deg,#ffc44060,transparent) }
     .sub { color:var(--dim); font:500 11px var(--mono); letter-spacing:.5px } .row { display:flex; justify-content:space-between; gap:8px; padding:3px 0 } .num { font:700 13px var(--mono) }
     .pill { display:inline-block; padding:2px 8px; font:700 10px var(--mono); letter-spacing:1.5px } .run { background:var(--crit); color:#fff } .stop { background:var(--ok); color:#0a1a10 }
+    .bar i { transition:width .45s cubic-bezier(.2,.8,.2,1), background .45s }
+    #panel.enter > * { animation:slideIn .45s cubic-bezier(.2,.8,.2,1) both } #panel.enter > *:nth-child(n+3) { animation-delay:.05s } #panel.enter > *:nth-child(n+5) { animation-delay:.1s } #panel.enter > *:nth-child(n+8) { animation-delay:.15s } #panel.enter > *:nth-child(n+12) { animation-delay:.2s }
+    @keyframes slideIn { from { opacity:0; transform:translateX(-14px) } }
+    .v.bump { animation:bump .5s ease-out } @keyframes bump { 30% { transform:scale(1.18); color:var(--amber) } }
+    .stat .v { display:inline-block; transform-origin:left center }
+    .hot { transition:background .2s, border-color .2s, transform .2s } .hot:hover { transform:translateX(3px) }
+    .btn { transition:background .2s, transform .15s } .btn:active { transform:scale(.96) }
+    .lbl { transition:transform .2s, border-color .2s } .lbl:hover { transform:translateY(-2px); border-left-color:#fff }
+    #top > * { animation:dropIn .6s cubic-bezier(.2,.8,.2,1) both } #top > *:nth-child(2) { animation-delay:.08s } #top > *:nth-child(3) { animation-delay:.16s } #top > *:nth-child(4) { animation-delay:.24s }
+    @keyframes dropIn { from { opacity:0; transform:translateY(-16px) } }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation:none !important; transition:none !important } }
     .bar { height:4px; background:#ffffff14; margin-top:3px } .bar i { display:block; height:100% }
     .hot { cursor:pointer; padding:7px 8px; margin:0 -8px; border-left:2px solid transparent } .hot:hover { background:#ffc4400f; border-left-color:var(--amber) }
     .hot .row b { font-weight:700 } .hot .row span:first-child { white-space:nowrap; overflow:hidden; text-overflow:ellipsis }

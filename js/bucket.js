@@ -3,6 +3,7 @@
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { CSS2DObject } from "three/addons/renderers/CSS2DRenderer.js";
+import { tempMaterial } from "./thermal.js";
 
 export const BW = 0.6, BH = 0.3, BD = 0.44;
 
@@ -56,7 +57,7 @@ export class Bucket {
   constructor(spec) {
     Object.assign(this, spec); // id, tag, name, lineup, section, row, hot, fla
     this.group = new THREE.Group(); this.group.name = spec.id;
-    this.parts = []; this.tmats = {}; this.thermal = false; this.openT = 0; this.openTarget = 0; this.state = null;
+    this.parts = []; this.tmats = {}; this.thermal = false; this.openT = 0; this.openTarget = 0; this.openV = 0; this.pop = 0; this.popT = 0; this.flick = 0; this.state = null;
 
     // door hinged on its left edge
     this.hinge = new THREE.Group(); this.hinge.position.set(-BW / 2 + .006, 0, .012); this.group.add(this.hinge);
@@ -84,7 +85,7 @@ export class Bucket {
     if (this.thermal) m.material = this.tmat(tkey);
     return m;
   }
-  tmat(k) { return this.tmats[k] || (this.tmats[k] = new THREE.MeshBasicMaterial({ color: ironbow(this.temp(k)) })); }
+  tmat(k) { return this.tmats[k] || (this.tmats[k] = tempMaterial(this.temp(k))); }
   temp(k) {
     const s = this.state; if (!s) return 26;
     return s.temps[k] ?? s.temps.door;
@@ -147,10 +148,10 @@ export class Bucket {
   }
   refreshThermal() {
     const s = this.state;
-    if (this.thermal) for (const k in this.tmats) this.tmats[k].color.copy(ironbow(this.temp(k)));
+    if (this.thermal) for (const k in this.tmats) this.tmats[k].userData.setT(this.temp(k));
     const hot = s ? Math.max(s.temps.L1, s.temps.L2, s.temps.L3) : 0;
     this.glow.visible = this.thermal && hot > 55;
-    if (this.glow.visible) { const k = Math.min(1, (hot - 55) / 20); this.glow.scale.setScalar(.35 + k * .9); this.glow.material.opacity = .4 + k * .6; }
+    if (this.glow.visible) { const k = Math.min(1, (hot - 55) / 20); this.glow.scale.setScalar(.35 + k * .9); this.glow.material.opacity = .15 + k * .25; }
     if (this.spot) {
       this.spot.visible = this.thermal && this.openTarget > 0 && !!s;
       if (this.spot.visible) this.spot.element.querySelector("b").textContent = s.temps.L2.toFixed(1) + " °C";
@@ -158,6 +159,8 @@ export class Bucket {
   }
 
   apply(s) {
+    if (this.state && s.running && !this.wasRunning) this.flick = .7; // pilot flickers as the contactor pulls in
+    this.wasRunning = s.running;
     this.state = s;
     const run = s.running;
     this.pilots[0].userData.orig = run ? MAT.redOn : MAT.redOff; // red = running (US convention)
@@ -166,8 +169,19 @@ export class Bucket {
     this.refreshThermal();
   }
 
+  hover(v) { this.pop = v ? 1 : 0; }
+  get busy() { return this.openT > .001 || this.openTarget || this.popT > .001 || this.pop || this.flick > 0 || Math.abs(this.openV) > .001; }
   update(dt) {
-    this.openT += (this.openTarget - this.openT) * (1 - Math.exp(-dt * 5));
+    // spring door: slight overshoot as it swings open and settles
+    this.openV += ((this.openTarget - this.openT) * 38 - this.openV * 7.5) * dt;
+    this.openT = Math.max(0, this.openT + this.openV * dt);
+    this.popT += (this.pop - this.popT) * (1 - Math.exp(-dt * 14));
+    this.doorMesh.position.z = this.popT * .008;
+    this.doorMesh.scale.setScalar(1 + this.popT * .012);
+    if (this.flick > 0) {
+      this.flick -= dt; const on = this.flick <= 0 || Math.sin(this.flick * 60) > 0;
+      if (!this.thermal) this.pilots[0].material = on ? this.pilots[0].userData.orig : MAT.redOff;
+    }
     this.hinge.rotation.y = -this.openT * 1.95;
     this.lever.rotation.z = -.8 + this.openT * .8;
     if (this.lamp) this.lamp.intensity = this.openT * .5;

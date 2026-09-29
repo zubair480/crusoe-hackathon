@@ -6,6 +6,7 @@ import { CSS2DRenderer, CSS2DObject } from "three/addons/renderers/CSS2DRenderer
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { Bucket, BW, BH, BD, ironbow } from "./bucket.js";
 import { Sim } from "./sim.js";
+import { ThermalCam, tempMaterial, tnorm } from "./thermal.js";
 
 const host = document.getElementById("host");
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
@@ -16,7 +17,8 @@ host.append(renderer.domElement);
 const css = new CSS2DRenderer(); css.domElement.className = "css2d"; host.append(css.domElement);
 
 const scene = new THREE.Scene();
-const BG = new THREE.Color(0x9aa3ab), TBG = new THREE.Color(0x06031a);
+const BG = new THREE.Color(0x9aa3ab), TBG = new THREE.Color(tnorm(21), tnorm(21), tnorm(21));
+const tcam = new ThermalCam(renderer);
 scene.background = BG.clone(); scene.fog = new THREE.Fog(0x9aa3ab, 22, 48);
 const pmrem = new THREE.PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(), .04).texture; scene.environmentIntensity = .35;
@@ -180,7 +182,7 @@ function setThermal(on) {
   scene.background.copy(on ? TBG : BG); scene.fog.color.copy(on ? TBG : BG);
   scene.traverse((o) => {
     if (!o.isMesh || !o.userData.static) return;
-    if (on) { o.userData.orig = o.userData.orig || o.material; o.material = new THREE.MeshBasicMaterial({ color: ironbow(24 + o.getWorldPosition(new THREE.Vector3()).y * 1.4 + (o === floor ? -1 : 0)), fog: true }); }
+    if (on) { o.userData.orig = o.userData.orig || o.material; o.material = tempMaterial(o.userData.temp ?? (24.5 + o.getWorldPosition(new THREE.Vector3()).y * 1.2 + (o === floor ? -1.5 : 0))); }
     else if (o.userData.orig) { o.material.dispose(); o.material = o.userData.orig; }
   });
   for (const b of buckets.values()) b.setThermal(on);
@@ -221,12 +223,12 @@ function macroPose(b) {
 function select(b) {
   if (selected && selected !== b) selected.setOpen(false);
   if (!b) {
-    selected = null; macro = false; renderPanel();
+    selected = null; macro = false; renderPanel(); enterPanel();
     if (autoThermal && thermal) setThermal(false); autoThermal = false;
     flyPath([{ pos: HOME.pos.clone(), target: HOME.target.clone(), dur: 2.4, lift: 1.4, label: "RETURNING TO OVERVIEW" }]);
     return;
   }
-  selected = b; macro = false; renderPanel();
+  selected = b; macro = false; renderPanel(); enterPanel();
   const c = b.group.getWorldPosition(new THREE.Vector3()), v = bucketView(b), m = macroPose(b);
   flyPath([
     { pos: c.clone().add(new THREE.Vector3(1.5, 1.1, 3.1)), target: c.clone().add(new THREE.Vector3(0, -.15, 0)), dur: 1.7, lift: .9, hold: .3, label: `1 / 3 · ${b.lineup} · SECTION ${b.section}` },
@@ -255,10 +257,11 @@ renderer.domElement.addEventListener("pointerup", (e) => {
   const h = pick(e.clientX, e.clientY); if (!h) return;
   if (h.b !== selected) select(h.b); else if (h.part === "contactor") macroView(h.b); else if (macro) { macro = false; const v = bucketView(h.b); flyTo(v.pos, v.target, 1.2, 0, "BUCKET VIEW"); }
 });
-let lastMove = 0;
+let lastMove = 0, hovered = null;
 renderer.domElement.addEventListener("pointermove", (e) => {
   const now = performance.now(); if (now - lastMove < 50) return; lastMove = now;
   const h = pick(e.clientX, e.clientY);
+  const hb = h && h.b !== selected ? h.b : null; if (hb !== hovered) { hovered && hovered.hover(false); hb && hb.hover(true); hovered = hb; }
   renderer.domElement.style.cursor = h ? "pointer" : "grab";
   if (h) {
     const s = h.b.state, mx = s ? Math.max(s.temps.L1, s.temps.L2, s.temps.L3) : 0;
@@ -269,6 +272,18 @@ renderer.domElement.addEventListener("pointermove", (e) => {
 document.getElementById("b-home").onclick = () => select(null);
 document.getElementById("b-thermal").onclick = () => setThermal(!thermal);
 addEventListener("keydown", (e) => { if (e.key === "t" || e.key === "T") setThermal(!thermal); if (e.key === "Escape") select(null); });
+
+// pulsing warning rings on the floor in front of the hot bucket
+const ringM = new THREE.MeshBasicMaterial({ color: 0xff5a1f, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+const rings = [0, 1, 2].map(() => { const m = new THREE.Mesh(new THREE.RingGeometry(.3, .34, 48), ringM.clone()); m.rotation.x = -Math.PI / 2; scene.add(m); return m; });
+{ const p = buckets.get(HOT).group.getWorldPosition(new THREE.Vector3()); rings.forEach((m) => m.position.set(p.x, .012, p.z + .55)); }
+function pulseRing(t) {
+  rings.forEach((m, i) => { const u = (t * .45 + i / 3) % 1; m.scale.setScalar(.6 + u * 1.6); m.material.opacity = (1 - u) * .7; m.visible = !thermal; });
+}
+function enterPanel() { panel.classList.remove("enter"); void panel.offsetWidth; panel.classList.add("enter"); }
+// stat chips bump when their value changes
+const bumpObs = new MutationObserver((ms) => ms.forEach((m) => { const el = m.target.nodeType === 3 ? m.target.parentElement : m.target; if (el.id === "c-t") return; el.classList.remove("bump"); void el.offsetWidth; el.classList.add("bump"); }));
+["c-run", "c-alarm"].forEach((id) => bumpObs.observe(document.getElementById(id), { childList: true, characterData: true, subtree: true }));
 
 // ---------------------------------------------------------------- panel
 const panel = document.getElementById("panel");
@@ -321,14 +336,15 @@ function livePanel() {
 }
 
 // ---------------------------------------------------------------- loop
-function resize() { const w = host.clientWidth, h = host.clientHeight; renderer.setSize(w, h); css.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+function resize() { const w = host.clientWidth, h = host.clientHeight; renderer.setSize(w, h); css.setSize(w, h); tcam.resize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); }
 addEventListener("resize", resize); resize();
 const clock = new THREE.Clock(); let panelAcc = 0;
 renderer.setAnimationLoop(() => {
   const dt = Math.min(.05, clock.getDelta());
   simAcc += dt; while (simAcc >= .1) { simAcc -= .1; tickSim(); }
   panelAcc += dt; if (panelAcc > .25) { panelAcc = 0; selected ? livePanel() : (Math.random() < .15 && renderPanel()); }
-  for (const b of buckets.values()) if (b.openT > .001 || b.openTarget) b.update(dt);
+  for (const b of buckets.values()) if (b.busy) b.update(dt);
+  pulseRing(clock.elapsedTime);
   if (flight) stepFlight(dt);
   else if (!selected) {
     // drone: after a few idle seconds, drift around the room on a slow orbit with a gentle bob
@@ -344,7 +360,7 @@ renderer.setAnimationLoop(() => {
       camera.position.lerp(dp, k); controls.target.lerp(dtg, k);
     }
   }
-  controls.update(); renderer.render(scene, camera); css.render(scene, camera);
+  controls.update(); if (thermal) tcam.render(scene, camera, clock.elapsedTime); else renderer.render(scene, camera); css.render(scene, camera);
 });
 renderPanel();
 window.__mcc = { scene, camera, buckets, select, setThermal, sim };
