@@ -98,3 +98,9 @@ git merge origin/main
 ```
 
 Do not merge a branch just because its presentation looks complete. Verify returned objects, actual adapter outcomes, and the final artifact. Every PR uses the repository template and updates its handoff.
+
+## Implemented backend handoff
+
+Zubair's backend and workbook adapter are available in PR #1 on `codex/zubair-app-integration`. Claude owns the 3D frontend. See `docs/frontend-handoff.md` for exact endpoints, command names, revision handling and local development proxy setup. `TeamPorts` in `apps/web/lib/model.ts` defines the app-side seam for teammate modules; adapt module exports at the composition root rather than creating a second UI or job store. The app's persistent fixture coordinator is for demo/testing only and must be replaced with Isaac's production coordinator when available.
+
+The npm workspace generates shared types with `npm run contracts:generate`. `npm test` checks workflow gates and actual workbook behavior; `npm run typecheck` and `npm run build` check the app. `node apps/web/scripts/smoke.mjs` exercises the HTTP demo once against the local server; `--reset-demo` explicitly permits a rerun that resets this demo's state/workbook. Initial evidence remains stored locally; the demo reset does not recursively remove uploads.

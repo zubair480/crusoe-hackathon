@@ -7,6 +7,7 @@ import { CaseStore } from './store';
 import { exportReport } from './report';
 import type { Command } from './model';
 import { readSchedule } from '@thermaldesk/excel';
+import ExcelJS from 'exceljs';
 
 let directory: string, service: CaseService;
 beforeEach(async () => { directory = await mkdtemp(join(tmpdir(), 'thermaldesk-test-')); service = new CaseService(new CaseStore(directory)); });
@@ -76,5 +77,19 @@ describe('both workflow pipelines', () => {
     await expect(act('approve_scope')).rejects.toThrow('reviewer name');
     await act('approve_scope', 'Demo reviewer'); await act('coordinate'); await act('complete'); await act('verify');
     await expect(act('approve_closure')).rejects.toThrow('reviewer name');
+  });
+  it('requires explicit reviewed reconciliation after manual workbook changes', async () => {
+    await schedule();
+    const book = new ExcelJS.Workbook(); await book.xlsx.readFile(service.workbookPath);
+    book.getWorksheet('Schedule')!.getCell('E2').value = 'Manual technician edit';
+    await book.xlsx.writeFile(service.workbookPath);
+    let state = await act('sync_schedule');
+    expect(state.job?.actions.filter(a => a.action_type === 'schedule_sync').at(-1)?.status).toBe('failed');
+    await expect(act('notify_manager')).rejects.toThrow('Excel schedule');
+    await expect(act('reconcile_schedule', 'Reviewer')).rejects.toThrow('Review');
+    const snapshot = await readSchedule(service.workbookPath);
+    state = await service.command({ command: 'reconcile_schedule', expectedRevision: state.revision, reviewer: 'Reviewer', expectedWorkbookFingerprint: snapshot.fingerprint! });
+    expect(state.schedule.rows[0].technician_name).toBe('Alex Morgan (demo)');
+    expect(state.events.some(e => e.title === 'Workbook reconciliation authorized')).toBe(true);
   });
 });

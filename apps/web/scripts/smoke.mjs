@@ -1,0 +1,44 @@
+// Runs against the local demo only. Use --reset-demo explicitly to rerun an existing case.
+import assert from 'node:assert/strict';
+const base = process.env.THERMALDESK_URL ?? 'http://127.0.0.1:3001';
+if (!['localhost', '127.0.0.1'].includes(new URL(base).hostname)) throw new Error('Smoke test requires a local demo server.');
+const get = async path => { const response = await fetch(base + path); assert.equal(response.status, 200); return response; };
+let state = await (await get('/api/case')).json();
+async function action(command, expected = 200, extra = {}) {
+  const response = await fetch(base + '/api/case', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: base }, body: JSON.stringify({ command, expectedRevision: state.revision, reviewer: 'HTTP demo reviewer', ...extra }) });
+  const result = await response.json();
+  assert.equal(response.status, expected, JSON.stringify(result));
+  if (expected === 200) state = result;
+  return result;
+}
+if (process.argv.includes('--reset-demo')) await action('reset_demo');
+else assert.equal(state.revision, 0, 'Demo already has work. Pass --reset-demo only if resetting it is intended.');
+const health = await (await get('/api/health')).json();
+assert.equal(health.integrations.excel, 'live-local-file');
+const form = new FormData();
+form.set('file', new File(['Fictional technician note. No measured temperatures supplied.'], 'demo-note.txt', { type: 'text/plain' }));
+form.set('expectedRevision', String(state.revision));
+const upload = await fetch(base + '/api/evidence', { method: 'POST', headers: { Origin: base }, body: form });
+assert.equal(upload.status, 201); state = await upload.json();
+assert.equal((await get('/api/evidence/' + state.inspection.evidence.at(-1).id)).status, 200);
+await action('analyze'); await action('approve_scope', 409); await action('coordinate', 409);
+await action('load_demo_scope'); await action('approve_scope'); await action('coordinate');
+assert.equal(state.job.status, 'scheduled');
+assert.equal(state.job.actions.find(a => a.action_type === 'schedule_sync').status, 'confirmed');
+await action('notify_manager'); await action('cancel_technician'); await action('coordinate');
+assert.equal(state.job.actions.filter(a => a.action_type === 'parts_order').length, 1);
+await action('wrong_asset'); await action('verify'); await action('approve_closure', 409);
+assert.equal(state.verification.result, 'mismatch');
+await action('incomplete'); await action('verify'); await action('approve_closure', 409);
+await action('complete'); await action('verify'); await action('approve_closure');
+assert.equal(state.job.status, 'closed');
+const schedule = await (await get('/api/schedule?format=json')).json();
+assert.equal(schedule.rows[0].job_status, 'closed');
+const workbook = Buffer.from(await (await get('/api/schedule')).arrayBuffer());
+assert.equal(workbook.subarray(0, 2).toString(), 'PK');
+const report = await (await get('/api/report')).text();
+assert.ok(report.includes('approve_closure'));
+assert.ok(report.includes('Synthetic demonstration'));
+const denied = await fetch(base + '/api/case', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: 'https://untrusted.example' }, body: JSON.stringify({ command: 'reset_demo', expectedRevision: state.revision }) });
+assert.equal(denied.status, 403);
+console.log(JSON.stringify({ result: 'PASS', revision: state.revision, status: state.job.status, workbookBytes: workbook.length, reportBytes: report.length, checks: ['upload/download', 'approval gates', 'schedule/write/read-back', 'cancellation/rebooking', 'single purchase', 'wrong-asset block', 'incomplete block', 'verified closure', 'report download', 'origin rejection'] }, null, 2));

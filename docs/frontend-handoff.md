@@ -4,6 +4,8 @@ Claude owns the 3D/Three.js frontend. Zubair's coding agent owns backend routes,
 
 Backend branch: `codex/zubair-app-integration`. Package manager: npm. Node 22+. Run `npm ci` then `npm run dev` from the repository root. The server binds to `http://127.0.0.1:3000`. Use a second port if another server already owns 3000, and use the URL printed by Next.
 
+For a separate backend on port 3001, use `npm run dev --workspace @thermaldesk/web -- --port 3001`. The agent's local backend is running on that port while the frontend can keep its own server.
+
 ## Endpoints
 
 | Method and route | Contract |
@@ -14,6 +16,7 @@ Backend branch: `codex/zubair-app-integration`. Package manager: npm. Node 22+. 
 | POST `/api/evidence` | Multipart `file` and `expectedRevision`. Accepts PNG, JPEG, PDF, text up to 8 MB; returns updated CaseState. Initial inspection uploads only. |
 | GET `/api/evidence/:id` | Download a stored file referenced by `local-evidence://:id`. |
 | GET `/api/schedule` | Actual `.xlsx` download; 404 before the first schedule update. |
+| GET `/api/schedule?format=json` | Current on-disk rows and fingerprint for reviewing manual changes. |
 | GET `/api/report` | HTML report attachment. Printable in a browser, including print-to-PDF. |
 
 All business object properties are snake_case from `@thermaldesk/contracts`. App wrapper state uses the names in `CaseState`. Don't rename data fields for the 3D scene; map display labels in the frontend. Core case fields: `inspection`, `recommendation`, `job`, `completion`, `verification`, `schedule`, `events`, `revision`, `scenarioLoaded`.
@@ -34,6 +37,8 @@ All business object properties are snake_case from `@thermaldesk/contracts`. App
 `cancel_technician` blocks an existing scheduled job and updates the workbook. Calling `coordinate` again books a replacement without ordering the demo part twice. `sync_schedule` retries a workbook update. `reset_demo` resets only this app's demo state and demo workbook; label the button clearly. No real calls, orders, or notifications are implemented in the fixture adapters.
 
 Every mutation sends the latest revision. Refetch after 409 and show its error. Disable duplicate clicks while a request is pending. Never change server state only inside the 3D animation. Drive scene status from the returned state; link the asset node to `inspection.asset_id`, the technician node to `job.booking`, and evidence nodes to their stable evidence IDs.
+
+Workbook conflicts require an explicit choice, not a silent overwrite. Show the actual rows from `GET /api/schedule?format=json` beside the job. If the reviewer chooses **Restore this job's schedule from the job record**, POST `reconcile_schedule` with `reviewer`, `expectedRevision`, and `expectedWorkbookFingerprint` from that read. A further edit causes another rejection. This deliberately restores the job's managed cells; importing changed technicians/timing back into the coordinator is a separate future adapter operation.
 
 ## Connection and ownership
 

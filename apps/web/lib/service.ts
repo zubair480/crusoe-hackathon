@@ -35,6 +35,7 @@ export class CaseService {
         case 'analyze':
           if (state.job) throw new Error('An active repair exists. Start a new inspection separately.');
           state.recommendation = await this.ports.analyzeInspection(state.inspection);
+          if (!['draft', 'needs_information'].includes(state.recommendation.status) || state.recommendation.approval) throw new Error('Analysis cannot approve its own recommendation.');
           state.scenarioLoaded = false;
           note('Inspection reviewed by demo adapter', 'Missing thermal data remains unresolved. Crusoe inference is not connected yet.');
           break;
@@ -63,6 +64,17 @@ export class CaseService {
           break;
         }
         case 'sync_schedule': await writeSchedule(); break;
+        case 'reconcile_schedule': {
+          const job = requireJob();
+          const name = reviewer();
+          const snapshot = await readSchedule(this.workbookPath);
+          if (!input.expectedWorkbookFingerprint || snapshot.fingerprint !== input.expectedWorkbookFingerprint) throw new Error('Workbook changed. Review its current contents before reconciling.');
+          state.schedule = snapshot;
+          job.state_version++;
+          note('Workbook reconciliation authorized', `${name} explicitly chose the canonical job record for this job's managed schedule cells. Unrelated rows and columns are preserved.`, 'live');
+          await writeSchedule();
+          break;
+        }
         case 'notify_manager': {
           const job = requireJob();
           const action = job.actions.find(a => a.idempotency_key === `schedule:${job.job_id}:${job.state_version}` && a.status === 'confirmed');

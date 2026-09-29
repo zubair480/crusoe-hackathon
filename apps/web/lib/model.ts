@@ -14,8 +14,8 @@ export interface CaseState {
   events: Event[];
   scenarioLoaded: boolean;
 }
-export type Command = 'analyze' | 'load_demo_scope' | 'approve_scope' | 'coordinate' | 'sync_schedule' | 'notify_manager' | 'cancel_technician' | 'complete' | 'wrong_asset' | 'incomplete' | 'verify' | 'approve_closure' | 'reset_demo';
-export interface CommandInput { command: Command; expectedRevision: number; reviewer?: string }
+export type Command = 'analyze' | 'load_demo_scope' | 'approve_scope' | 'coordinate' | 'sync_schedule' | 'reconcile_schedule' | 'notify_manager' | 'cancel_technician' | 'complete' | 'wrong_asset' | 'incomplete' | 'verify' | 'approve_closure' | 'reset_demo';
+export interface CommandInput { command: Command; expectedRevision: number; reviewer?: string; expectedWorkbookFingerprint?: string }
 
 /** Replace these demo ports with teammate package exports; keep UI/routes unchanged. */
 export interface TeamPorts {
