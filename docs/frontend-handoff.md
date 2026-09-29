@@ -14,12 +14,21 @@ For a separate backend on port 3001, use `npm run dev --workspace @thermaldesk/w
 | GET `/api/case` | Current `CaseState` from `apps/web/lib/model.ts`. |
 | POST `/api/case` | JSON `{command, expectedRevision, reviewer?}`. Returns updated CaseState. Errors are `{error}` with 409; unauthorized origins get 403. |
 | POST `/api/evidence` | Multipart `file` and `expectedRevision`. Accepts PNG, JPEG, PDF, text up to 8 MB; returns updated CaseState. Initial inspection uploads only. |
+| POST `/api/completion` | Actual local completion files and technician statement; multipart contract below. Returns updated CaseState, with verification cleared. |
 | GET `/api/evidence/:id` | Download a stored file referenced by `local-evidence://:id`. |
 | GET `/api/schedule` | Actual `.xlsx` download; 404 before the first schedule update. |
 | GET `/api/schedule?format=json` | Current on-disk rows and fingerprint for reviewing manual changes. |
 | GET `/api/report` | HTML report attachment. Printable in a browser, including print-to-PDF. |
 
 All business object properties are snake_case from `@thermaldesk/contracts`. App wrapper state uses the names in `CaseState`. Don't rename data fields for the 3D scene; map display labels in the frontend. Core case fields: `inspection`, `recommendation`, `job`, `completion`, `verification`, `schedule`, `events`, `revision`, `scenarioLoaded`.
+
+## Completion uploads — 2026-09-29
+
+Claude: wire the completion upload control to `POST /api/completion`. Send `FormData` with `expectedRevision`, `technician_id`, `asset_id` (the operator's stated equipment identity), `reported_status` (`complete`, `incomplete`, or `unknown`), `comments`, and 1–6 `file` entries (PNG/JPEG/PDF/text; 8 MB combined). Optional `document_kind: receipt` marks the uploaded attachments as receipts; otherwise images are photos and documents are notes. The server bounds the actual request body, checks file signatures, stores original files and the typed statement, then uses Ali's intake and Isaac's canonical completion event. No provider request is made. Typed statements use source `import`; they are never labeled Plaud. `live` evidence mode means a real local upload, not a verified repair.
+
+On 201, replace the client state with the response. Preserve mismatched equipment IDs: the backend records them as unresolved and verification blocks closure. Replacing the completion package increments its version and invalidates the old comparison/review; earlier original files remain stored. Each submission is the complete new evidence package, so include all files needed for that version. A stale revision returns 409; refresh and let the operator review before retrying. Other invalid inputs return 400; unauthorized origins return 403. No upload is accepted before a booked/active job or after closure/cancellation. The server refreshes Isaac's job before accepting evidence.
+
+After upload, explicitly run `verify`, display its checks, then offer the separate reviewer action only if passing. Workbook sync is attempted and actual receipts remain authoritative; a workbook failure does not discard submitted evidence. The report includes completion version, claimed status, technician, and each evidence source/mode. Existing demo completion commands remain available. This is a backend increment: the 3D completion control still needs frontend wiring. Existing local-demo authentication and deployment limitations remain.
 
 ## Executable sequence
 
