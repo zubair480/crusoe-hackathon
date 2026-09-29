@@ -1,0 +1,14 @@
+{
+  "name": "@thermaldesk/analysis",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "scripts": {
+    "test": "node --experimental-strip-types --test test/*.test.ts",
+    "analyze:image": "node --experimental-strip-types scripts/analyze-local-image.ts"
+  },
+  "engines": {
+    "node": ">=22.6"
+  }
+}
