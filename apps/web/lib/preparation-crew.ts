@@ -16,6 +16,6 @@ export function createPreparationCrewHandler(role: BandRole, preparation: Pick<R
     const target = next[role];
     await tools.sendMessage(encodeEnvelope(summary, target
       ? { kind: 'job_event', job_id: envelope.job_id, requested_by: envelope.requested_by, what: `prepare:${target}` }
-      : { kind: 'report', job_id: envelope.job_id, requested_by: envelope.requested_by, headline: 'Research and drafts prepared; nothing purchased, sent or booked.', details: [summary] }), target ? [target] : []);
+      : { kind: 'report', job_id: envelope.job_id, requested_by: envelope.requested_by, headline: 'Research and drafts prepared; nothing purchased, sent or booked.', details: [summary] }), [target ?? 'RepairCoordinator']);
   };
 }

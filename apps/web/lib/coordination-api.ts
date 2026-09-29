@@ -4,8 +4,8 @@ import { coordination, service } from './service';
 import { RepairPreparation, preparationDispatchKey } from './repair-preparation';
 
 export const preparation = new RepairPreparation(service.store);
-const globals = globalThis as typeof globalThis & { thermaldeskAssistedBandGateway?: BandGateway };
-export const band = globals.thermaldeskAssistedBandGateway ??= new BandGateway(service.store.directory, coordination, undefined, preparation);
+const globals = globalThis as typeof globalThis & { thermaldeskAssistedBandGatewayV2?: BandGateway };
+export const band = globals.thermaldeskAssistedBandGatewayV2 ??= new BandGateway(service.store.directory, coordination, undefined, preparation);
 export async function coordinationStatus() {
   const state = await service.read();
   return { revision: state.revision, band: await band.status(),

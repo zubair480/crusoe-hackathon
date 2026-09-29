@@ -104,29 +104,35 @@ export class BandGateway {
   }
   /** Persist intent before every remote mutation; uncertain sends are never repeated automatically. */
   async dispatch(jobId: string, eventKey: string, update = false) {
-    await this.start(jobId);
+    if (this.activeJob && this.activeJob !== jobId) throw new Error('Stop the current Band crew before switching jobs.');
     await mkdir(this.directory, { recursive: true });
     const lock = await open(`${this.file}.lock`, 'wx').catch(() => { throw new Error('Band dispatch is busy; refresh its status.'); });
     try {
       await this.load();
       let room = this.rooms[jobId];
-      const sender = this.agents.get('ScheduleReporter')!.runtime.link.rest;
+      const sdk = await import('@band-ai/sdk');
+      const { NoopLogger } = await import('@band-ai/sdk/core');
+      const sender = new sdk.BandLink({ ...sdk.loadAgentConfig('schedule_reporter', this.configPath), logger: new NoopLogger() }).rest;
       if (!room) {
+        if (!(await this.check()).every(agent => agent.verified)) throw new Error('Band agent identity verification failed.');
+        // Create and persist the room before connecting the crew. Otherwise the
+        // creator's room_added event can fail roomFilter before its ID is saved.
+        await this.stop();
         room = this.rooms[jobId] = { job_id: jobId, room_id: null, status: 'creating', events: {} };
         await this.save();
         const created = await sender.createChat(undefined, { maxRetries: 0, timeoutInSeconds: 15 });
         room.room_id = created.id;
         await this.save();
-        const sdk = await import('@band-ai/sdk');
         const coordinator = sdk.loadAgentConfig('repair_coordinator', this.configPath);
         await sender.addChatParticipant(created.id, { participantId: coordinator.agentId, role: 'member' }, { maxRetries: 0, timeoutInSeconds: 15 });
         room.status = 'ready'; await this.save();
-        await this.agents.get('RepairCoordinator')!.runtime.link.subscribeRoom(created.id);
       }
+      if (!room.room_id || room.status !== 'ready') throw new Error('Band room setup has an uncertain outcome; review the saved room reference before retrying.');
+      await this.start(jobId);
+      room = this.rooms[jobId]; // Startup reloads persisted room objects.
       if (!room.room_id || room.status !== 'ready') throw new Error('Band room setup has an uncertain outcome; review the saved room reference before retrying.');
       if (room.events[eventKey]) return { room_id: room.room_id, status: room.events[eventKey], duplicate: true };
       room.events[eventKey] = 'pending'; await this.save();
-      const sdk = await import('@band-ai/sdk');
       const coordinator = sdk.loadAgentConfig('repair_coordinator', this.configPath);
       const content = encodeEnvelope(`${update ? 'Update' : 'Coordinate'} ${jobId}. ${this.preparation ? 'Prepare supplier research, quote checks and email drafts only. Nothing is purchased, sent or booked.' : 'Business actions are simulated; Excel is a real local file.'}`,
         update ? { kind: 'job_event', job_id: jobId, requested_by: 'ScheduleReporter', what: eventKey }
