@@ -1,5 +1,16 @@
 # Zubair handoff
 
+## Supplier research and unsent outreach — 2026-09-29 22:47 UTC
+
+Owner: Zubair. Branch: `codex/zubair-app-integration`. Latest pushed implementation: `576dc4e`.
+
+- User selected public supplier links and email drafts. Added `/api/preparation/workbench`, linked from the existing integration bridge as **Parts & dispatch**, with research links, source/recorder/time for entered quotes, quote rejection reasons, combined planning-budget checks and RFQ/technician `.eml` downloads. The old execution button now says **Run simulated demo**. Current unapproved case and all other local work were preserved.
+- Interfaces: `RepairPreparation.read()`, `.command(PreparationCommand)`, `.runRole(jobId, BandRole)`, `.draft(kind, id)`, `preparationDispatchKey(CaseState)` and `createPreparationCrewHandler(role, preparation)`. `GET/POST /api/preparation` and draft download inputs are documented in `docs/isaac-api-integration.md`. App metadata stays in `case.json`, tied to the exact approved scope; shared v1 and Isaac's canonical execution state are unchanged.
+- App Band dispatch now injects the research/draft handler instead of calling simulated supplier/booking adapters. Five roles route work in a Band room; outputs include actual research links and quote-check reasons. A changed quote, budget or contact gets a fresh dispatch key; identical inputs deduplicate. `business_actions` is `research_and_drafts_only`. Local **Prepare work** needs no Band connection or inference. Environment names are unchanged; keep fixture analysis and `CRUSOE_LIVE_REQUESTS_ENABLED=false`. Band configuration remains in the ignored server-only file.
+- Verification: all 90 offline tests passed (26 coordination, 10 intake, 44 app/Excel, 10 analysis), typecheck and production build passed, isolated HTTP system workflow passed through both pipelines, actual local Excel/report, five preparation outputs and an unsent RFQ without execution-state changes. Eight preparation tests include stale/scope checks, unsafe headers/URLs, combined budget, source provenance, dispatch deduplication and all five roles with memory transport. Browser checked the live local page and its unapproved-scope gating. Existing Plaud build-tracing warning remains.
+- Actual modes: local persistence/checks/draft generation are implemented. Public links are research entry points, not verified supplier matches. Quotes and technician qualifications are operator-entered, not independently verified. No automatic prices, real purchase, outbound email, appointment or repair certification is claimed. No paid call or live Band dispatch was run for this increment; live room delivery remains unverified for the new handler. Earlier credential identity checks are not delivery evidence.
+- **Claude:** keep or replace the supplemental page using the documented API; retain scope gating and draft-only labels. **Isaac:** the application composes a preparation-only crew using your exported protocol/handler interfaces; your package and canonical execution engine are preserved. Real procurement/booking adapters and professional approval remain future integration requirements, not capabilities of this increment.
+
 ## Completion evidence upload — 2026-09-29 22:40 UTC
 
 Owner: Zubair. Branch: `codex/zubair-app-integration`. Latest pushed implementation: `706a5af`.
