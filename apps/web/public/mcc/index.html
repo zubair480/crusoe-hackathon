@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ThermalDesk · MCC Room</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+  <script type="importmap">{"imports": {"three": "./vendor/three/three.module.min.js", "three/addons/": "./vendor/three/addons/"}}</script>
+  <style>
+    :root { --bg:#07090b; --glass:rgba(8,11,14,.72); --edge:rgba(255,196,64,.55); --fg:#eef1f3; --dim:#7f8a94; --amber:#ffc440; --ok:#5cf08a; --warn:#ffc440; --crit:#ff4632;
+      --hud:"Chakra Petch","Bahnschrift","Segoe UI",sans-serif; --mono:"JetBrains Mono",Consolas,monospace; }
+    * { box-sizing:border-box } html,body { height:100%; margin:0; background:var(--bg); color:var(--fg); font:500 13px/1.35 var(--hud); overflow:hidden; letter-spacing:.3px }
+    #host { position:fixed; inset:0 } #host canvas { display:block } .css2d { position:absolute; inset:0; pointer-events:none }
+    #vig { position:fixed; inset:0; pointer-events:none; z-index:2; background:radial-gradient(ellipse at 50% 55%, transparent 55%, rgba(0,0,0,.55) 100%) }
+    body.thermal #vig { background:radial-gradient(ellipse at 50% 55%, transparent 50%, rgba(0,0,0,.7) 100%) }
+    .frame { position:relative; background:var(--glass); backdrop-filter:blur(6px); clip-path:polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px)); border-left:2px solid var(--edge) }
+
+    /* top HUD strip */
+    #top { position:fixed; top:14px; left:16px; right:16px; display:flex; align-items:stretch; gap:10px; z-index:5; pointer-events:none }
+    #top > * { pointer-events:auto }
+    .id { padding:8px 16px 8px 14px } .id .t { font:700 18px var(--hud); letter-spacing:3px; text-transform:uppercase } .id .t em { font-style:normal; color:var(--amber) }
+    .id .s { font:500 10px var(--mono); color:var(--dim); letter-spacing:1.5px; margin-top:1px }
+    .stat { padding:8px 14px; min-width:92px } .stat .k { font:600 9px var(--hud); letter-spacing:2px; color:var(--dim); text-transform:uppercase } .stat .v { font:700 20px var(--mono); line-height:1.1 }
+    .stat.alarm .v { color:var(--crit) } .stat.alarm.blink { animation:blink 1.1s steps(2) infinite } @keyframes blink { 50% { border-left-color:var(--crit) } }
+    .sp { flex:1 }
+    .simtag { align-self:center; font:700 10px var(--mono); letter-spacing:2px; color:#111; background:var(--amber); padding:4px 8px }
+    .btn { font:700 12px var(--hud); letter-spacing:2px; text-transform:uppercase; color:var(--fg); border:0; padding:0 18px; cursor:pointer; background:var(--glass); clip-path:polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px)); border-left:2px solid #ffffff40 }
+    .btn:hover { background:rgba(40,46,54,.85) } .btn kbd { font:700 10px var(--mono); color:var(--dim); margin-left:6px; border:1px solid #ffffff30; padding:0 4px }
+    .btn.on { background:linear-gradient(90deg,#2e066e,#c81e6e 45%,#ec501e 75%,#fca00a); border-left-color:#fff }
+
+    /* left panel */
+    #panel { position:fixed; top:92px; left:16px; width:320px; max-height:calc(100% - 150px); overflow:auto; padding:14px 16px 16px; z-index:4; scrollbar-width:none }
+    #panel h2 { margin:0; font:700 17px var(--hud); letter-spacing:1.5px; text-transform:uppercase } #panel h2 small { color:var(--amber); font-size:17px }
+    #panel h3 { margin:14px 0 6px; font:700 10px var(--hud); letter-spacing:2.5px; color:var(--amber); text-transform:uppercase; display:flex; gap:8px; align-items:center }
+    #panel h3::after { content:""; flex:1; height:1px; background:linear-gradient(90deg,#ffc44060,transparent) }
+    .sub { color:var(--dim); font:500 11px var(--mono); letter-spacing:.5px } .row { display:flex; justify-content:space-between; gap:8px; padding:3px 0 } .num { font:700 13px var(--mono) }
+    .pill { display:inline-block; padding:2px 8px; font:700 10px var(--mono); letter-spacing:1.5px } .run { background:var(--crit); color:#fff } .stop { background:var(--ok); color:#0a1a10 }
+    .bar i { transition:width .45s cubic-bezier(.2,.8,.2,1), background .45s }
+    #panel.enter > * { animation:slideIn .45s cubic-bezier(.2,.8,.2,1) both } #panel.enter > *:nth-child(n+3) { animation-delay:.05s } #panel.enter > *:nth-child(n+5) { animation-delay:.1s } #panel.enter > *:nth-child(n+8) { animation-delay:.15s } #panel.enter > *:nth-child(n+12) { animation-delay:.2s }
+    @keyframes slideIn { from { opacity:0; transform:translateX(-14px) } }
+    .v.bump { animation:bump .5s ease-out } @keyframes bump { 30% { transform:scale(1.18); color:var(--amber) } }
+    .stat .v { display:inline-block; transform-origin:left center }
+    .hot { transition:background .2s, border-color .2s, transform .2s } .hot:hover { transform:translateX(3px) }
+    .btn { transition:background .2s, transform .15s } .btn:active { transform:scale(.96) }
+    .lbl { transition:transform .2s, border-color .2s } .lbl:hover { transform:translateY(-2px); border-left-color:#fff }
+    #top > * { animation:dropIn .6s cubic-bezier(.2,.8,.2,1) both } #top > *:nth-child(2) { animation-delay:.08s } #top > *:nth-child(3) { animation-delay:.16s } #top > *:nth-child(4) { animation-delay:.24s }
+    @keyframes dropIn { from { opacity:0; transform:translateY(-16px) } }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation:none !important; transition:none !important } }
+    .bar { height:4px; background:#ffffff14; margin-top:3px } .bar i { display:block; height:100% }
+    .hot { cursor:pointer; padding:7px 8px; margin:0 -8px; border-left:2px solid transparent } .hot:hover { background:#ffc4400f; border-left-color:var(--amber) }
+    .hot .row b { font-weight:700 } .hot .row span:first-child { white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+    .find { margin-top:10px; padding:10px 12px; background:linear-gradient(90deg,#ff46321f,#ff463208); border-left:2px solid var(--crit) }
+    .find .tag { font:700 9px var(--mono); color:var(--amber); letter-spacing:2px } .find b { font-weight:600 }
+    canvas.spark { width:100%; height:64px; display:block; background:#00000033 }
+    .acts { display:flex; gap:8px; margin-top:12px } .acts .btn { height:32px; font-size:11px; flex:1 }
+    .legend { display:grid; grid-template-columns:auto 1fr; gap:4px 10px; font:500 11px var(--mono); color:var(--dim) } .legend i { width:10px; height:10px; display:inline-block; margin-top:2px }
+
+    /* 3D labels */
+    .lbl { font:700 12px var(--hud); letter-spacing:2.5px; color:#fff; padding:3px 10px 3px 8px; background:rgba(8,11,14,.78); border-left:2px solid var(--amber); pointer-events:auto; cursor:pointer; white-space:nowrap; text-transform:uppercase }
+    .lbl small { color:var(--dim); font:500 10px var(--mono); letter-spacing:1px; margin-left:6px }
+    .hotlbl { font:700 11px var(--mono); color:#fff; padding:2px 7px; background:rgba(200,20,10,.85); pointer-events:auto; cursor:pointer; white-space:nowrap; animation:pulse 1.2s ease-in-out infinite }
+    @keyframes pulse { 50% { background:rgba(255,120,20,.95) } }
+    .spot { position:relative; width:0; height:0 } .spot i { position:absolute; left:-14px; top:-14px; width:28px; height:28px; border:2px solid #fff; border-radius:50%; box-shadow:0 0 0 1px #0006 }
+    .spot i::before,.spot i::after { content:""; position:absolute; background:#fff } .spot i::before { left:11px; top:-8px; width:2px; height:40px } .spot i::after { top:11px; left:-8px; height:2px; width:40px }
+    .spot b { position:absolute; left:22px; top:-32px; color:#fff; font:700 16px var(--mono); text-shadow:0 0 4px #000,0 0 2px #000; white-space:nowrap }
+
+    /* thermal camera overlay */
+    #scale { position:fixed; right:22px; top:100px; bottom:70px; width:60px; display:none; z-index:4; font:700 11px var(--mono); color:#fff; text-shadow:0 0 3px #000 }
+    #scale .grad { position:absolute; right:0; top:0; bottom:0; width:14px; border:1px solid #fff8; background:linear-gradient(to top,#08041c,#2e066e 18%,#800a8c 36%,#c81e6e 52%,#ec501e 66%,#fca00a 80%,#ffe25a 92%,#fffff0) }
+    #scale span { position:absolute; right:20px } #emis { position:fixed; right:22px; bottom:28px; display:none; font:700 11px var(--mono); color:#fff; letter-spacing:1px; z-index:4 }
+    #rec { position:fixed; left:50%; top:88px; transform:translateX(-50%); display:none; font:700 11px var(--mono); letter-spacing:2px; color:#fff; z-index:4 } #rec::before { content:"● "; color:var(--crit) }
+    body.thermal #scale, body.thermal #emis, body.thermal #rec { display:block }
+
+    /* bottom: controls + minimap-style progress */
+    #keys { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); display:flex; gap:14px; z-index:4; font:600 10px var(--hud); letter-spacing:1.5px; color:var(--dim); text-transform:uppercase; padding:8px 14px }
+    #keys b { font:700 10px var(--mono); color:var(--fg); border:1px solid #ffffff38; padding:1px 5px; margin-right:5px }
+    #stage { position:fixed; left:50%; bottom:64px; transform:translate(-50%,8px); opacity:0; transition:opacity .35s, transform .35s; z-index:5; pointer-events:none;
+      font:700 15px var(--hud); letter-spacing:4px; text-transform:uppercase; color:#fff; padding:8px 20px; background:rgba(8,11,14,.75); border-left:3px solid var(--amber); white-space:nowrap; text-shadow:0 0 8px #000 }
+    #stage.on { opacity:1; transform:translate(-50%,0) }
+    #tip { position:fixed; pointer-events:none; z-index:6; padding:6px 10px; font:500 11px var(--mono); display:none; background:rgba(8,11,14,.9); border-left:2px solid var(--amber) }
+    #tip b { font:700 12px var(--hud); letter-spacing:1px }
+  </style>
+</head>
+<body>
+  <div id="host"></div>
+  <div id="vig"></div>
+  <div id="top">
+    <div class="frame id"><div class="t">Thermal<em>Desk</em></div><div class="s">MCC ROOM 1 · BLDG 4 · 480 V 3Φ</div></div>
+    <div class="frame stat"><div class="k">Motors</div><div class="v" id="c-run">–</div></div>
+    <div class="frame stat alarm" id="st-alarm"><div class="k">Hot joints</div><div class="v" id="c-alarm">–</div></div>
+    <div class="frame stat"><div class="k">Sim clock</div><div class="v" id="c-t">0.0</div></div>
+    <div class="sp"></div>
+    <span class="simtag">SIMULATED</span>
+    <button class="btn" id="b-home">Overview<kbd>ESC</kbd></button>
+    <button class="btn" id="b-thermal">Thermal<kbd>T</kbd></button>
+  </div>
+  <aside id="panel" class="frame"></aside>
+  <div id="scale"></div><div id="emis">ε 0.95 · T<sub>refl</sub> 27 °C · IRONBOW</div><div id="rec">IR 00:00</div>
+  <div id="keys" class="frame"><span><b>DRAG</b>orbit</span><span><b>WHEEL</b>zoom</span><span><b>CLICK</b>open bucket</span><span><b>CLICK K1</b>close-up</span><span><b>T</b>thermal</span></div>
+  <div id="tip"></div>
+  <div id="stage"></div>
+  <script type="module" src="./js/app.js"></script>
+  <script type="module" src="./js/integration.js"></script>
+</body>
+</html>

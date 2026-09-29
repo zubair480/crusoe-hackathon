@@ -151,6 +151,6 @@ export class CaseService {
 }
 
 // Demo-only composition root. Replace ports here after reviewing teammate PRs.
-const directory = join(process.cwd(), 'artifacts', 'thermaldesk-demo');
+const directory = process.env.THERMALDESK_ARTIFACT_DIR || join(process.cwd(), 'artifacts', 'thermaldesk-demo');
 const analysisPorts = createAnalysisPorts(directory, process.env.THERMALDESK_ANALYSIS_MODE === 'crusoe' ? 'crusoe' : 'fixture');
 export const service = new CaseService(new CaseStore(directory), createCoordinationPorts(directory, analysisPorts));

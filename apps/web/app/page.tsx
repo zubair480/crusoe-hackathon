@@ -1,3 +1,3 @@
-export default function Home() {
-  return <main><h1>ThermalDesk</h1><p>Inspection to verified repair. Shared application in progress.</p></main>;
-}
+import { redirect } from 'next/navigation';
+
+export default function Home() { redirect('/mcc/index.html'); }
