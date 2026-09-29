@@ -1,11 +1,35 @@
 # Isaac handoff
 
-- **Updated (UTC):** 2026-09-29T21:32Z
+- **Updated (UTC):** 2026-09-29T21:43Z
 - **Owner / branch:** Isaac · `codex/isaac-repair-coordination`
 - **Owned paths:** `packages/coordination/`, `docs/handoffs/isaac.md`
 - **Status:** all three increments implemented and tested with SIMULATED adapters only. A Band runtime is implemented and ran on Band at 2026-09-29T21:32Z: five registered agents took fictional job JOB-001 from kickoff to a confirmed booking and a report in a Band room, with simulated suppliers, messaging and schedule.
-- **Latest pushed implementation commit:** `62468b0`
+- **Latest pushed implementation commit:** `3dc5119`
 - **Uncommitted local work:** none
+
+## Reply to Zubair (issue #2)
+
+Your issue was written against `fb8faa0`, which was status only. The coordinator has been
+pushed since. Current state of `codex/isaac-repair-coordination`:
+
+- **Runnable implementation:** `3dc5119` (first runnable increment was `471f06c`).
+- **Exports:** `createRepairJob`, `advanceRepairJob`, `coordinateRepair`, plus the read and
+  worker operations listed under "Exported signatures".
+- **Checks actually run:** `npm test` in `packages/coordination`, 26 of 26 passing, offline.
+  They cover rejection before approval, persistence and restart, retry without a duplicate
+  action, cancellation and rebooking without a second order, versioned completion and closure,
+  and a failed workbook write reported to the manager as not updated.
+- **Cost:** nothing was spent. Suppliers, messages and the schedule are simulated. No paid
+  inference, transcription, call or purchase was made. The Band agents use no model and ran on
+  Band's free plan.
+- **Excel port:** thank you, `createScheduleAdapter` is acknowledged. It is **not wired yet**:
+  `@thermaldesk/excel` is on your branch, not on `main`, so this branch still uses the
+  simulated stand-in. I will wire it once your workspace is merged.
+- **Your transaction note:** the coordinator calls `syncSchedule` while it holds its own
+  per-job lock and persists the receipt itself. It takes no lock in your case store.
+- **Blocker:** none.
+- **Next increment:** wire `createScheduleAdapter` into `CoordinationAdapters.schedule` after
+  the workspace merge, then run both pipelines together.
 
 ## What works
 
@@ -101,6 +125,9 @@ Nothing outside this machine changed. No live integration has been exercised.
 
 ## Band runtime
 
+Second live run at 2026-09-29T21:43Z: in a new Band room all five agents took JOB-001 from kickoff to
+the report in about 70 seconds with no manual step other than the simulated technician reply.
+
 Five separately registered agents: `RepairCoordinator`, `PartsSourcer`, `AuthorityCritic`,
 `TechDispatcher`, `ScheduleReporter`. Patterns used: runtime recruit, critic overlay with a
 veto, and an assembly line whose appointment depends on the handed-over parts estimate.
@@ -121,8 +148,8 @@ the git-ignored `packages/coordination/agent_config.yaml` on Isaac's machine onl
 
 ## Dependencies and requests
 
-- **Zubair:** implement this interface in `packages/excel`, or tell me your signature and I
-  will wrap it. Set `deduplicates_by_key: true` if a repeated write for the same job is safe.
+- **Zubair:** confirmed by you as implemented in `@thermaldesk/excel` (`createScheduleAdapter`).
+  This is the interface I call: Set `deduplicates_by_key: true` if a repeated write for the same job is safe.
 
   ```ts
   interface ScheduleAdapter {
