@@ -1,5 +1,17 @@
 # Zubair handoff
 
+## Authorized Crusoe evaluation — 2026-09-29 22:51 UTC
+
+Owner: Zubair. Branch: `codex/zubair-app-integration`. Latest pushed evaluation implementation: `f8dc567`.
+
+- The user explicitly authorized up to $2.50 for this ten-minute session. Completed 181 actual Crusoe requests: one image preflight plus 180 synthetic evaluation calls across ten categories. Estimated total token cost: $0.09501747, using published $0.30/M input and $1.83/M output pricing; provider invoice is authoritative. Batch ran 22:43:15–22:50:44 UTC. No paid process remains running.
+- 180/180 batch calls passed provider, schema, known-evidence-ID and application review-gate checks. Batch usage: 194,163 input / 19,820 output tokens; median 681 ms, p95 812 ms. These are structural/integration results, not diagnostic accuracy. Four additional completion gate checks passed locally and are not counted as API calls.
+- Citation audit: 0/180 drafts cited non-image evidence. Sampled drafts focused on the abstract image and omitted measurement/follow-up detail. **Sunny:** review multimodal prompt grounding and require explicit findings for supplied note/measurement evidence before claiming comprehensive analysis. This finding is included in the report; no semantic accuracy claim is made.
+- Reusable commands: `apps/web/scripts/CRUSOE-EVALUATION.md`. Scripts require explicit live opt-in, fixed model/output limits, sequential pacing, conservative per-request budget reservation and deadline. Dry-run, disabled-network guard and syntax checks passed. No package or shared contract changes.
+- Local evidence: `artifacts/crusoe-evaluation/2026-09-29T22-43-15-643Z/` contains `requests.jsonl`, `summary.json`, `quality-audit.json`, synthetic source images, adapter code snapshot and `report.html`. Actual tested adapter SHA-256 is recorded because its prompt already had an unrelated local change. No credentials or customer information were published.
+- Actual integration: live Crusoe inference using fictional data. No real inspection, repair, approval, purchase, technician/manager message, Plaud pull or live Band dispatch. Existing application environment files and concurrent work were preserved. This authorization is exhausted as a time-bounded session; future paid runs require new authorization. Existing no-spend development defaults remain.
+
+
 ## Supplier research and unsent outreach — 2026-09-29 22:47 UTC
 
 Owner: Zubair. Branch: `codex/zubair-app-integration`. Latest pushed implementation: `576dc4e`.
