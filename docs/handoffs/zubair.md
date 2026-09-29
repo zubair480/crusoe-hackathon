@@ -1,5 +1,14 @@
 # Zubair handoff
 
+## Live Band preparation run — 2026-09-29 23:00 UTC
+
+Owner: Zubair. Branch: `codex/zubair-app-integration`. Latest pushed implementation: `4d03689`.
+
+- On the user's explicit request to run the workflow, exercised an isolated fictional case through the real Band transport. Initial run reached four roles and exposed the creator subscription race. Fixed room persistence before crew startup, retained dispatch deduplication across the startup reload, and addressed the final report to RepairCoordinator. Refreshed the idle development gateway singleton so the running app uses the fix.
+- Successful run completed at `2026-09-29T22:59:41.630Z`, Band room `0682bf6d-8cdf-44dc-8d00-ce1a9101a618`. All five roles persisted fresh outputs; the critic accepted a fictional USD 123.45 quote and blocked a wrong-part USD 300 quote against a USD 200 planning budget. Both unsent emails downloaded. Repeated dispatch was deduplicated. Final report message `5368e901-1c23-4338-b6c3-471a335bb1fc` was retrieved from Band's coordinator context.
+- Verification: 13 focused preparation/gateway tests, typecheck, production build and both-pipeline isolated HTTP workflow passed. Added explicit `npm run test:system -- --live-band`; default system test remains offline. Test runner closes Band connections and its temporary server. Evidence is local/ignored in `artifacts/band-preparation-run-1790722764703/`, including `result.json`, provider transcript, preparation outputs and `.eml` drafts. No credentials appear in those receipts.
+- Actual modes: live Band routing and real local persistence/drafts; fictional prices, roster and approval. Zero paid model requests, purchases, supplier/technician emails or bookings. Ordinary app case was preserved. This replaces the earlier unverified-delivery limitation for this preparation handler only; real procurement/booking remain unimplemented. Existing Plaud build-tracing warning remains. No teammate API or shared contract change; **Isaac / Claude:** use the documented preparation behavior and preserve its labels.
+
 ## Authorized Crusoe evaluation — 2026-09-29 22:51 UTC
 
 Owner: Zubair. Branch: `codex/zubair-app-integration`. Latest pushed evaluation implementation: `f8dc567`.
