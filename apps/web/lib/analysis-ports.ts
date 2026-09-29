@@ -4,9 +4,11 @@ import { analyzeInspection, compareCompletion, CrusoeAdapter, FixtureAnalysisAda
 import { assertContract } from '@thermaldesk/contracts';
 import { demoPorts } from './demo-ports';
 import type { TeamPorts } from './model';
+import { guardedInferenceFetch } from './inference-policy';
 
 export function createAnalysisPorts(directory: string, mode: 'fixture' | 'crusoe' = 'fixture'): TeamPorts {
   const adapter = mode === 'crusoe' ? new CrusoeAdapter({
+    fetchImpl: guardedInferenceFetch(),
     resolveImage: async evidence => {
       const match = /^local-evidence:\/\/([a-f0-9-]{36}\.(png|jpg))$/.exec(evidence.uri);
       if (!match) throw new Error('Analysis accepts only locally uploaded JPEG/PNG references.');

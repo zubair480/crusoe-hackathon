@@ -42,6 +42,8 @@ Shared contract changes are coordinated through Zubair. Propose the change in yo
 
 ## External actions and approvals
 
+- Latest user cost constraint: integrate code but do not execute billable API calls or paid smoke tests without a new explicit authorization. Existing credentials are not permission to spend. Keep local fixtures enabled and `CRUSOE_LIVE_REQUESTS_ENABLED=false`. Use mocked provider responses for tests. Never publish credentials or copy keys into another teammate's branch.
+
 - The recommendation review gate and the completion verification gate are separate. Approval identifies the exact recommendation or verification version.
 - Purchasing and booking require an approved job and customer-configured authority. Use the existing authority for routine actions; escalate out-of-scope actions rather than demanding repeated approval for everything.
 - A code-building request does not authorize calling actual technicians, buying actual supplies, or messaging third parties. Live demos use explicitly authorized recipients and purchasing environments. Simulated and sandbox actions must remain visibly labeled.

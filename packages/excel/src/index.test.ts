@@ -3,7 +3,7 @@ import { mkdtemp, rm, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import ExcelJS from 'exceljs';
-import { readSchedule, syncSchedule, columns } from './index';
+import { readSchedule, syncSchedule, columns, createScheduleAdapter, type CoordinatorScheduleRequest } from './index';
 import type { RepairJob } from '@thermaldesk/contracts';
 let directory: string, path: string;
 beforeEach(async () => { directory = await mkdtemp(join(tmpdir(), 'thermaldesk-xlsx-')); path = join(directory, 'schedule.xlsx'); });
@@ -45,4 +45,27 @@ it('detects stale fingerprints and serializes two writers instead of losing an u
   expect([a, b].filter(x => x.status === 'confirmed')).toHaveLength(1);
   expect([a, b].filter(x => x.status === 'failed')).toHaveLength(1);
   expect((await readSchedule(path)).rows).toHaveLength(1);
+});
+
+it('bridges coordinator requests without hiding manual changes or accepting a different job row', async () => {
+  let accepted: string | null = null;
+  const adapter = createScheduleAdapter({ workbookPath: path, getExpectedFingerprint: () => accepted, onConfirmed: snapshot => { accepted = snapshot.fingerprint; } });
+  const canonical = job();
+  const request: CoordinatorScheduleRequest = {
+    job_id: canonical.job_id, idempotency_key: 'bridge-1', reason: 'booking_confirmed', job: canonical,
+    row: { job_id: canonical.job_id, asset_id: canonical.asset_id, site_id: canonical.site_id,
+      technician_id: canonical.booking!.technician_id, technician_name: canonical.booking!.technician_name,
+      start_at: canonical.booking!.start_at, end_at: canonical.booking!.end_at,
+      parts_status: canonical.parts_status, job_status: canonical.status, last_updated_at: canonical.updated_at },
+  };
+  expect((await adapter.syncSchedule(request)).status).toBe('confirmed');
+  expect(accepted).toBe((await readSchedule(path)).fingerprint);
+  await expect(adapter.syncSchedule({ ...request, row: { ...request.row, asset_id: 'WRONG' } })).rejects.toThrow('canonical');
+  const previous = accepted;
+  const book = new ExcelJS.Workbook(); await book.xlsx.readFile(path);
+  book.getWorksheet('Schedule')!.getCell('E2').value = 'Manual edit'; await book.xlsx.writeFile(path);
+  const modified = await readFile(path);
+  expect((await adapter.syncSchedule({ ...request, idempotency_key: 'bridge-2', job: job(2) })).status).toBe('failed');
+  expect(accepted).toBe(previous);
+  expect(await readFile(path)).toEqual(modified);
 });

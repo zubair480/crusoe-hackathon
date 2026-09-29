@@ -3,6 +3,12 @@ import assert from 'node:assert/strict';
 const base = process.env.THERMALDESK_URL ?? 'http://127.0.0.1:3001';
 if (!['localhost', '127.0.0.1'].includes(new URL(base).hostname)) throw new Error('Smoke test requires a local demo server.');
 const get = async path => { const response = await fetch(base + path); assert.equal(response.status, 200); return response; };
+// Check before any mutation, including reset. A configured key is not permission to spend.
+const health = await (await get('/api/health')).json();
+for (const provider of ['crusoe', 'plaud', 'coordination']) {
+  assert.equal(health.integrations[provider], 'simulated', `Offline smoke test refuses ${provider} mode ${health.integrations[provider]}. Select fixtures first.`);
+}
+assert.equal(health.integrations.excel, 'live-local-file');
 let state = await (await get('/api/case')).json();
 async function action(command, expected = 200, extra = {}) {
   const response = await fetch(base + '/api/case', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: base }, body: JSON.stringify({ command, expectedRevision: state.revision, reviewer: 'HTTP demo reviewer', ...extra }) });
@@ -13,8 +19,6 @@ async function action(command, expected = 200, extra = {}) {
 }
 if (process.argv.includes('--reset-demo')) await action('reset_demo');
 else assert.equal(state.revision, 0, 'Demo already has work. Pass --reset-demo only if resetting it is intended.');
-const health = await (await get('/api/health')).json();
-assert.equal(health.integrations.excel, 'live-local-file');
 const form = new FormData();
 form.set('file', new File(['Fictional technician note. No measured temperatures supplied.'], 'demo-note.txt', { type: 'text/plain' }));
 form.set('expectedRevision', String(state.revision));

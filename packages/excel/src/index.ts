@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, open, unlink } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import type { ActionReceipt, RepairJob } from '@thermaldesk/contracts';
+export { createScheduleAdapter, type CoordinatorScheduleRequest, type CoordinatorScheduleOptions } from './coordinator';
 
 export const columns = ['job_id', 'asset_id', 'site_id', 'technician_id', 'technician_name', 'start_at', 'end_at', 'parts_status', 'job_status', 'last_updated_at'] as const;
 export type ScheduleRow = Record<typeof columns[number], string>;

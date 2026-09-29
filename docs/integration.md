@@ -64,6 +64,8 @@ The database/job store is the canonical execution state. Import meaningful manua
 
 ## Shared fixtures and first end-to-end run
 
+Current development constraint: do not spend API credits. Keep external integrations simulated, `THERMALDESK_ANALYSIS_MODE=fixture`, and `CRUSOE_LIVE_REQUESTS_ENABLED=false`. The sponsor demonstration described below is a future milestone requiring explicit spending authorization, not permission to run paid tests now. Keys alone never grant that permission.
+
 - `fixtures/inspection.json`: fictional initial evidence, not a diagnostic benchmark.
 - `fixtures/approved-recommendation.json`: synthetic approved recommendation for exercising execution while the analysis UI is still being built.
 - `fixtures/completion-wrong-asset.json`: intentionally mismatched follow-up image. A successful test keeps the job open.
@@ -100,6 +102,8 @@ git merge origin/main
 Do not merge a branch just because its presentation looks complete. Verify returned objects, actual adapter outcomes, and the final artifact. Every PR uses the repository template and updates its handoff.
 
 ## Implemented backend handoff
+
+Isaac's announced scheduling port is supported by `createScheduleAdapter` in `@thermaldesk/excel`. See the package README for persisted fingerprint callbacks and transaction ownership. Keep blocked reasons in `getJobDetail` outside the v1 record, as Isaac proposed; no shared schema change is required.
 
 Zubair's backend and workbook adapter are available in PR #1 on `codex/zubair-app-integration`. Claude owns the 3D frontend. See `docs/frontend-handoff.md` for exact endpoints, command names, revision handling and local development proxy setup. `TeamPorts` in `apps/web/lib/model.ts` defines the app-side seam for teammate modules; adapt module exports at the composition root rather than creating a second UI or job store. The app's persistent fixture coordinator is for demo/testing only and must be replaced with Isaac's production coordinator when available.
 

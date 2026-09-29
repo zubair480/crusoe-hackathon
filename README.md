@@ -2,7 +2,7 @@
 
 **ThermalDesk turns thermal inspections into completed, verified repairs.**
 
-The `codex/zubair-app-integration` branch now includes a local backend, actual Excel updates and report export. Sponsor and dispatch integrations use explicitly simulated adapters until their owners connect them. Claude owns the 3D frontend; the current page is scaffold.
+The `codex/zubair-app-integration` branch now includes a local backend, Sunny's analysis module, actual Excel updates and report export. Paid provider requests are disabled by default; development uses fixture responses. Intake and dispatch still use simulated adapters until those modules arrive. Claude owns the 3D frontend; the current page is scaffold.
 
 Backend setup: `npm ci`, then `npm run dev`. Open the server address printed in the terminal. Run `npm test` and `npm run typecheck` to verify the implementation. See [the frontend API handoff](docs/frontend-handoff.md) for routes and the full demo sequence.
 
