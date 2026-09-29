@@ -290,9 +290,38 @@ const fileIn = Object.assign(document.createElement("input"), { type: "file", ac
 document.body.append(fileIn);
 fileIn.onchange = () => { const f = fileIn.files[0]; fileIn.value = ""; if (f) analyzeUpload(f); };
 const upEl = document.createElement("div"); upEl.className = "uppin";
-upEl.innerHTML = `<button class="up-main"><b>⇪</b>Upload IR image</button><button class="up-alt">Capture with phone (demo)</button><small>or drop a PNG / JPEG on the scene</small>`;
+upEl.innerHTML = `<button class="up-main"><b>⇪</b>Upload IR image</button><button class="up-plaud">Import latest Plaud recording</button><button class="up-alt">Capture with phone (demo)</button><small>or drop a PNG / JPEG on the scene</small>`;
 upEl.addEventListener("pointerdown", (e) => e.stopPropagation());
 upEl.querySelector(".up-main").onclick = (e) => { e.stopPropagation(); fileIn.click(); };
+upEl.querySelector(".up-plaud").onclick = async (e) => {
+  e.stopPropagation();
+  const button = e.currentTarget, original = button.textContent;
+  button.disabled = true; button.textContent = "Importing Plaud…";
+  try {
+    const caseResponse = await fetch(API + "/api/case", { cache: "no-store" });
+    const st = await caseResponse.json();
+    if (!caseResponse.ok) throw new Error(st.error || `case ${caseResponse.status}`);
+    const plaudResponse = await fetch(API + "/api/plaud", { cache: "no-store" });
+    const plaud = await plaudResponse.json();
+    if (!plaudResponse.ok) throw new Error(plaud.error || `Plaud ${plaudResponse.status}`);
+    const asset = st.inspection?.asset_id;
+    const recording = (plaud.recordings || []).find((item) => (item.asset_mentions || []).includes(asset));
+    if (!recording) throw new Error(`No Plaud recording mentions ${asset || "this asset"}.`);
+    const importResponse = await fetch(API + "/api/plaud", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ recording_id: recording.id, expectedRevision: st.revision }),
+    });
+    const next = await importResponse.json();
+    if (!importResponse.ok) throw new Error(next.error || `Plaud import ${importResponse.status}`);
+    stage("PLAUD RECORDING IMPORTED");
+    window.dispatchEvent(new CustomEvent("thermaldesk:state", { detail: structuredClone(next) }));
+    if (window.thermaldeskWorkflow?.refresh) await window.thermaldeskWorkflow.refresh();
+  } catch (error) {
+    stage(`PLAUD: ${String(error.message || error).toUpperCase()}`);
+  } finally {
+    button.disabled = false; button.textContent = original;
+  }
+};
 upEl.querySelector(".up-alt").onclick = (e) => { e.stopPropagation(); if (selected) { hideUpload(); openDevice(selected); } };
 const upPin = new CSS2DObject(upEl); upPin.visible = false;
 function showUpload(b) { b.group.add(upPin); upPin.position.set(BW / 2 + .02, .06, .04); upPin.visible = true; upEl.classList.remove("in"); void upEl.offsetWidth; upEl.classList.add("in"); }
