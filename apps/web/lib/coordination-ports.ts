@@ -1,5 +1,7 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { join } from 'node:path';
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { createScheduleAdapter, readSchedule, type ScheduleSnapshot } from '@thermaldesk/excel';
 import {
   ACTION_TYPES,
   advanceRepairJob,
@@ -8,9 +10,11 @@ import {
   createRepairJob,
   createSimulatedCommunication,
   createSimulatedRoster,
-  createSimulatedSchedule,
   createSimulatedSupplier,
   getJobDetail,
+  getRepairJob,
+  getJobTimeline,
+  publishRepairSchedule,
   systemClock,
   type CoordinationAdapters,
   type CoordinationContext,
@@ -24,10 +28,30 @@ import type { TeamPorts } from './model';
  * adapters remain simulated; the CaseService writes the resulting canonical job to
  * the local Excel workbook and verifies that write before manager acknowledgement.
  */
-export function createCoordinationPorts(directory: string, base: TeamPorts): TeamPorts {
+export function createCoordinationPorts(directory: string, base: TeamPorts) {
   const context: CoordinationContext = {
     repository: createFileJobRepository({ directory: join(directory, 'coordination') }),
   };
+  const snapshotPath = join(directory, 'schedule-state.json');
+  const readScheduleSnapshot = async (): Promise<ScheduleSnapshot> => {
+    try { return JSON.parse(await readFile(snapshotPath, 'utf8')); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+    // Migrate the last accepted app fingerprint, never trust a fresh external workbook read.
+    try { return JSON.parse(await readFile(join(directory, 'case.json'), 'utf8')).schedule; }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+    return { fingerprint: null, rows: [] };
+  };
+  const acceptScheduleSnapshot = async (snapshot: ScheduleSnapshot) => {
+    await mkdir(directory, { recursive: true });
+    const temporary = `${snapshotPath}.${randomUUID()}.tmp`;
+    await writeFile(temporary, JSON.stringify(snapshot), 'utf8');
+    await rename(temporary, snapshotPath);
+  };
+  const schedule = createScheduleAdapter({
+    workbookPath: join(directory, 'demo-schedule.xlsx'),
+    getExpectedFingerprint: async () => (await readScheduleSnapshot()).fingerprint,
+    onConfirmed: acceptScheduleSnapshot,
+  });
 
   const buildAdapters = (recommendation: Pick<CoordinatorRecommendation, 'site_id' | 'parts'>): CoordinationAdapters => {
     const now = Date.now();
@@ -57,30 +81,49 @@ export function createCoordinationPorts(directory: string, base: TeamPorts): Tea
         technician('TECH-DEMO-2', 'Taylor Backup Technician', 15),
       ]),
       communication: createSimulatedCommunication(),
-      schedule: createSimulatedSchedule({ clock: systemClock }),
+      schedule,
       manager: { manager_id: 'MGR-DEMO', name: 'Demo Facilities Manager', address: 'sim:manager' },
     };
   };
 
-  return {
+  const adaptersForJob = async (jobId: string) => {
+    const detail = await getJobDetail(jobId, context);
+    return buildAdapters({ site_id: detail.job.site_id, parts: detail.approved_scope.parts });
+  };
+  const ensureJob = async (recommendation: CoordinatorRecommendation, previous: import('./model').RepairJob | null, runtime: 'job_queue' | 'band' = 'job_queue') => {
+    const approvalKey = createHash('sha256').update(JSON.stringify(recommendation.approval)).digest('hex').slice(0, 16);
+    const jobId = previous?.job_id ?? `JOB-${recommendation.recommendation_id}-v${recommendation.version}-${approvalKey}`;
+    return createRepairJob({
+      recommendation, job_id: jobId, runtime,
+      authority: { authority_id: `AUTH-${jobId}`, mode: 'simulated', currency: 'USD', max_total_minor: 1_000_000,
+        allowed_actions: [...ACTION_TYPES], expires_at: new Date(Date.now() + 30 * 86400000).toISOString() },
+      requirements: { required_qualifications: ['electrical'], duration_minutes: 120 },
+    }, context);
+  };
+  const ports: TeamPorts = {
     ...base,
+    refreshJob: job => getRepairJob(job.job_id, context),
+    readScheduleSnapshot,
+    acceptScheduleSnapshot,
+    async syncJobSchedule(job) {
+      const accepted = await readScheduleSnapshot();
+      const actual = await readSchedule(join(directory, 'demo-schedule.xlsx'));
+      const row = accepted.rows.find(row => row.job_id === job.job_id);
+      const booking = job.booking?.status === 'confirmed' ? job.booking : null;
+      const latest = job.actions.filter(action => action.action_type === 'schedule_sync').at(-1);
+      if (latest?.status === 'confirmed' && actual.fingerprint === accepted.fingerprint && row &&
+          row.job_status === job.status && row.parts_status === job.parts_status &&
+          row.technician_id === (booking?.technician_id ?? '') && row.start_at === (booking?.start_at ?? '') && row.end_at === (booking?.end_at ?? '')) return job;
+      return publishRepairSchedule(job.job_id, await adaptersForJob(job.job_id), context);
+    },
+    async notifyManager(job) {
+      return ports.syncJobSchedule!(job);
+    },
     async coordinateRepair(recommendation, previous) {
       const coordinatorRecommendation = recommendation as CoordinatorRecommendation;
-      const jobId = previous?.job_id ?? `JOB-${recommendation.recommendation_id}-${Date.now()}`;
-      const authority = {
-        authority_id: `AUTH-${jobId}`,
-        mode: 'simulated' as const,
-        currency: 'USD',
-        max_total_minor: 1_000_000,
-        allowed_actions: [...ACTION_TYPES],
-        expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-      };
-      await createRepairJob({
-        recommendation: coordinatorRecommendation,
-        job_id: jobId,
-        authority,
-        requirements: { required_qualifications: ['electrical'], duration_minutes: 120 },
-      }, context);
+      const created = await ensureJob(coordinatorRecommendation, previous);
+      const jobId = created.job_id;
+      if ((await getJobDetail(jobId, context)).runtime === 'band') return created;
       const adapters = buildAdapters(coordinatorRecommendation);
       let job = await runCoordinator(jobId, adapters, context);
       if (job.status === 'coordinating') {
@@ -136,4 +179,11 @@ export function createCoordinationPorts(directory: string, base: TeamPorts): Tea
       }, context);
     },
   };
+  return Object.assign(ports, {
+    context,
+    adaptersForJob,
+    createBandJob: (recommendation: import('./model').Recommendation, previous: import('./model').RepairJob | null) => ensureJob(recommendation, previous, 'band'),
+    getDetail: (jobId: string) => getJobDetail(jobId, context),
+    getTimeline: (jobId: string) => getJobTimeline(jobId, context),
+  });
 }

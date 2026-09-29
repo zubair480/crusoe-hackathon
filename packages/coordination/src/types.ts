@@ -373,6 +373,8 @@ export interface ScheduleSyncRequest {
 
 /** Zubair's Excel adapter. The coordinator waits for and records the receipt it returns. */
 export interface ScheduleAdapter extends AdapterIdentity {
+  /** Explicit app capability for a local file write; never a hosted workbook or external transaction. */
+  local_workbook?: boolean;
   syncSchedule(request: ScheduleSyncRequest): Promise<ActionReceipt>;
 }
 

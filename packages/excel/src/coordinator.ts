@@ -26,9 +26,11 @@ export interface CoordinatorScheduleOptions {
 export function createScheduleAdapter(options: CoordinatorScheduleOptions) {
   return {
     mode: 'live' as const,
+    local_workbook: true,
     deduplicates_by_key: true,
     async syncSchedule(request: CoordinatorScheduleRequest): Promise<ActionReceipt> {
-      const { job, row } = request;
+      const { row } = request;
+      const job = request.job.booking?.status !== 'confirmed' ? { ...request.job, booking: null } : request.job;
       const sameTime = (a: string | null, b?: string) =>
         !a && !b || Boolean(a && b && new Date(a).getTime() === new Date(b).getTime());
       if (request.job_id !== job.job_id || row.job_id !== job.job_id || row.asset_id !== job.asset_id || row.site_id !== job.site_id ||

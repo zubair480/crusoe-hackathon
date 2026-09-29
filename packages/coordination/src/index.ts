@@ -11,6 +11,7 @@ export {
   getRepairJob,
   listRepairJobs,
   processDueFollowUps,
+  publishRepairSchedule,
   runWorkerTick,
   selectCoordinationRuntime,
 } from './engine.js';

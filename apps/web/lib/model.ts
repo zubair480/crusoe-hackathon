@@ -19,6 +19,11 @@ export interface CommandInput { command: Command; expectedRevision: number; revi
 
 /** Replace these demo ports with teammate package exports; keep UI/routes unchanged. */
 export interface TeamPorts {
+  /** Canonical coordinator integration; omitted by standalone fixtures. */
+  refreshJob?(job: RepairJob): Promise<RepairJob>;
+  syncJobSchedule?(job: RepairJob): Promise<RepairJob>;
+  readScheduleSnapshot?(): Promise<ScheduleSnapshot>;
+  acceptScheduleSnapshot?(snapshot: ScheduleSnapshot): Promise<void>;
   analyzeInspection(input: InspectionPackage): Promise<Recommendation>;
   compareCompletion(job: RepairJob, recommendation: Recommendation, completion: CompletionEvidence): Promise<VerificationDraft>;
   coordinateRepair(recommendation: Recommendation, previous: RepairJob | null): Promise<RepairJob>;

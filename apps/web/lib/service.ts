@@ -14,7 +14,20 @@ export class CaseService {
   constructor(readonly store: CaseStore, readonly ports: TeamPorts = demoPorts) {
     this.workbookPath = join(store.directory, 'demo-schedule.xlsx');
   }
-  read() { return this.store.read(); }
+  async read() {
+    if (!this.ports.refreshJob) return this.store.read();
+    return this.store.update(async state => {
+      if (state.job) {
+        const job = await this.ports.refreshJob!(state.job);
+        if (JSON.stringify(job) !== JSON.stringify(state.job)) {
+          state.job = job;
+          state.revision++;
+        }
+        if (this.ports.readScheduleSnapshot) state.schedule = await this.ports.readScheduleSnapshot();
+      }
+      return { state, result: state };
+    });
+  }
   async command(input: CommandInput): Promise<CaseState> {
     return this.store.update(async state => {
       if (input.expectedRevision !== state.revision) throw new Error('This case changed. Refresh and review the current version.');
@@ -27,6 +40,13 @@ export class CaseService {
       const requireJob = () => { if (!state.job) throw new Error('Create a repair job first.'); return state.job; };
       const writeSchedule = async () => {
         const job = requireJob();
+        if (this.ports.syncJobSchedule) {
+          state.job = await this.ports.syncJobSchedule(job);
+          state.schedule = await this.ports.readScheduleSnapshot!();
+          const result = state.job.actions.filter(action => action.action_type === 'schedule_sync').at(-1);
+          if (result) note(result.status === 'confirmed' ? 'Excel schedule updated' : 'Excel update needs attention', result.detail, 'live');
+          return;
+        }
         const result = await syncSchedule({ workbookPath: this.workbookPath, job, idempotencyKey: `schedule:${job.job_id}:${job.state_version}`, expectedFingerprint: state.schedule.fingerprint });
         job.actions = job.actions.filter(a => !(a.action_type === 'schedule_sync' && a.idempotency_key === result.idempotency_key));
         job.actions.push(result);
@@ -72,17 +92,21 @@ export class CaseService {
           const snapshot = await readSchedule(this.workbookPath);
           if (!input.expectedWorkbookFingerprint || snapshot.fingerprint !== input.expectedWorkbookFingerprint) throw new Error('Workbook changed. Review its current contents before reconciling.');
           state.schedule = snapshot;
-          job.state_version++;
+          if (this.ports.acceptScheduleSnapshot) await this.ports.acceptScheduleSnapshot(snapshot);
+          else job.state_version++;
           note('Workbook reconciliation authorized', `${name} explicitly chose the canonical job record for this job's managed schedule cells. Unrelated rows and columns are preserved.`, 'live');
           await writeSchedule();
           break;
         }
         case 'notify_manager': {
           const job = requireJob();
-          const action = job.actions.find(a => a.idempotency_key === `schedule:${job.job_id}:${job.state_version}` && a.status === 'confirmed');
+          const action = this.ports.syncJobSchedule
+            ? job.actions.filter(a => a.action_type === 'schedule_sync').at(-1)
+            : job.actions.find(a => a.idempotency_key === `schedule:${job.job_id}:${job.state_version}` && a.status === 'confirmed');
           const actual = await readSchedule(this.workbookPath);
-          if (!action || actual.fingerprint !== state.schedule.fingerprint) throw new Error('Update and verify the current Excel schedule before notifying the manager.');
+          if (!action || action.status !== 'confirmed' || actual.fingerprint !== state.schedule.fingerprint) throw new Error('Update and verify the current Excel schedule before notifying the manager.');
           state.job = await this.ports.notifyManager(job, action);
+          if (this.ports.readScheduleSnapshot) state.schedule = await this.ports.readScheduleSnapshot();
           note('Manager update recorded', 'Simulated message includes job, technician, parts and verified workbook outcome. No external message was sent.');
           break;
         }
@@ -107,6 +131,7 @@ export class CaseService {
           if (!state.recommendation || !state.completion) throw new Error('Collect completion evidence before comparison.');
           if (job.status === 'closed') throw new Error('This job is already closed.');
           state.verification = await this.ports.compareCompletion(job, state.recommendation, state.completion);
+          if (this.ports.refreshJob) state.job = await this.ports.refreshJob(job);
           note('Completion compared', `Evidence comparison: ${state.verification.result.replaceAll('_', ' ')}. A person must review before closure.`, state.verification.analysis_mode === 'live' ? 'live' : 'simulated');
           break;
         }
@@ -126,6 +151,7 @@ export class CaseService {
           await unlink(this.workbookPath).catch(error => { if (error.code !== 'ENOENT') throw error; });
           const oldRevision = state.revision;
           state = seed(); state.revision = oldRevision;
+          if (this.ports.acceptScheduleSnapshot) await this.ports.acceptScheduleSnapshot(state.schedule);
           break;
         }
         default: throw new Error('Unknown action.');
@@ -163,4 +189,5 @@ export class CaseService {
 // Demo-only composition root. Replace ports here after reviewing teammate PRs.
 const directory = process.env.THERMALDESK_ARTIFACT_DIR || join(process.cwd(), 'artifacts', 'thermaldesk-demo');
 const analysisPorts = createAnalysisPorts(directory, process.env.THERMALDESK_ANALYSIS_MODE === 'crusoe' ? 'crusoe' : 'fixture');
-export const service = new CaseService(new CaseStore(directory), createCoordinationPorts(directory, analysisPorts));
+export const coordination = createCoordinationPorts(directory, analysisPorts);
+export const service = new CaseService(new CaseStore(directory), coordination);

@@ -18,6 +18,7 @@ export interface ActionSpec {
   summary: string;
   /** Purchases, outreach and bookings need a valid approval. Publishing state does not. */
   requires_approval: boolean;
+  local_workbook?: boolean;
   deduplicates_by_key: boolean;
   /** Start a new attempt when the previous one definitely failed. */
   retry_failed?: boolean;
@@ -59,6 +60,7 @@ export function checkActionAllowed(
   action_type: ActionType,
   mode: IntegrationMode,
   requires_approval: boolean,
+  local_workbook = false,
 ): ActionRefusal | null {
   const refuse = (code: string, message: string): ActionRefusal => ({ kind: 'refused', code, message });
   const authority = run.job.authority;
@@ -77,7 +79,7 @@ export function checkActionAllowed(
       `Authority ${authority.authority_id} does not allow ${action_type}.`,
     );
   }
-  if (!modeCovers(authority.mode, mode)) {
+  if (!modeCovers(authority.mode, mode) && !(action_type === 'schedule_sync' && local_workbook && !requires_approval)) {
     return refuse(
       'mode_not_authorized',
       `Authority ${authority.authority_id} is ${authority.mode} and does not cover a ${mode} ${action_type}.`,
@@ -144,7 +146,7 @@ export async function executeAction(run: JobRun, spec: ActionSpec): Promise<Acti
     attempt = last.attempt + 1;
   }
 
-  const refusal = checkActionAllowed(run, spec.action_type, spec.mode, spec.requires_approval);
+  const refusal = checkActionAllowed(run, spec.action_type, spec.mode, spec.requires_approval, spec.local_workbook);
   if (refusal) {
     run.emit({
       type: 'action_refused',

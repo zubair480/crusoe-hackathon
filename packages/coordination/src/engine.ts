@@ -1845,7 +1845,7 @@ const rosterContacts = new Map<string, { channel: string; address: string }>();
 
 function buildRow(run: JobRun): ScheduleRow {
   const { job } = run;
-  const booking = job.booking && job.booking.status !== 'cancelled' ? job.booking : null;
+  const booking = job.booking?.status === 'confirmed' ? job.booking : null;
   return {
     job_id: job.job_id,
     asset_id: job.asset_id,
@@ -1884,6 +1884,7 @@ async function syncSchedule(
     action_type: 'schedule_sync',
     logical_key,
     mode: schedule.mode,
+    local_workbook: schedule.local_workbook,
     summary,
     requires_approval: false,
     deduplicates_by_key: schedule.deduplicates_by_key ?? false,
@@ -1915,6 +1916,22 @@ async function syncSchedule(
         raw: receipt,
       };
     },
+  });
+}
+
+/** Explicit application publication, with receipts kept in the canonical job store. */
+export async function publishRepairSchedule(job_id: string, adapters: CoordinationAdapters, context: CoordinationContext): Promise<RepairJob> {
+  return withJobLock(context.repository, job_id, async () => {
+    const run = await loadRun(job_id, context);
+    const reason: ScheduleSyncReason = run.job.status === 'closed' ? 'closure_verified'
+      : run.job.status === 'cancelled' ? 'job_cancelled'
+      : run.job.booking?.status === 'cancelled' ? 'booking_cancelled' : 'booking_confirmed';
+    const suffix = `app:v${run.job.state_version}`;
+    const result = await syncSchedule(run, adapters, reason, suffix, true);
+    settleSync(run, result, reason, suffix);
+    await notifyManager(run, adapters, suffix, 'Current repair schedule');
+    await run.persist();
+    return clone(run.job);
   });
 }
 

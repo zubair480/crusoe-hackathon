@@ -49,6 +49,21 @@ try {
   if (!bridge.ok || !bridgeSource.includes('thermaldesk:state')) {
     throw new Error('3D application workflow bridge is missing or invalid.');
   }
+  const coordination = await fetch(`${base}/api/coordination`);
+  const coordinationState = await coordination.json();
+  if (!coordination.ok || coordinationState.band?.agents?.length !== 5 || coordinationState.band.connected || JSON.stringify(coordinationState).includes('api_key')) {
+    throw new Error('Coordination status must expose five disconnected agents without credentials.');
+  }
+  const blockedBand = await fetch(`${base}/api/coordination`, {
+    method: 'POST', headers: { Origin: base, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ command: 'start_band', expectedRevision: coordinationState.revision }),
+  });
+  if (blockedBand.status !== 409) throw new Error('Band start must require explicit live-transport opt-in.');
+  const deniedBand = await fetch(`${base}/api/coordination`, {
+    method: 'POST', headers: { Origin: 'https://untrusted.example', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ command: 'check_band', expectedRevision: coordinationState.revision }),
+  });
+  if (deniedBand.status !== 403) throw new Error('Coordination must reject an untrusted mutation origin.');
   const smoke = spawn(process.execPath, [resolve(web, 'scripts', 'smoke.mjs'), '--reset-demo'], {
     cwd: root,
     env: { ...process.env, THERMALDESK_URL: base },

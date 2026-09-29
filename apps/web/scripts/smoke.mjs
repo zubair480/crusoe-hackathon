@@ -6,9 +6,12 @@ if (!['localhost', '127.0.0.1'].includes(new URL(base).hostname)) throw new Erro
 const get = async path => { const response = await fetch(base + path); assert.equal(response.status, 200); return response; };
 // Check before any mutation, including reset. A configured key is not permission to spend.
 const health = await (await get('/api/health')).json();
-for (const provider of ['crusoe', 'plaud', 'coordination']) {
+for (const provider of ['crusoe', 'coordination']) {
   assert.equal(health.integrations[provider], 'simulated', `Offline smoke test refuses ${provider} mode ${health.integrations[provider]}. Select fixtures first.`);
 }
+// The Plaud health flag may describe already downloaded files. This test never calls
+// the Plaud import/pull route, so cached recordings do not imply a live provider call.
+assert.ok(['simulated', 'live-pulled'].includes(health.integrations.plaud), 'Offline smoke test refuses an active Plaud provider.');
 assert.equal(health.integrations.excel, 'live-local-file');
 let state = await (await get('/api/case')).json();
 async function action(command, expected = 200, extra = {}) {
