@@ -12,9 +12,29 @@ export interface CrusoeAdapterOptions {
 const DEFAULT_BASE_URL = "https://api.inference.crusoecloud.com/v1";
 const DEFAULT_MODEL = "nvidia/Nemotron-3-Nano-Omni-Reasoning-30B-A3B";
 
-function extractJson(text: string): unknown {
-  const trimmed = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
-  return JSON.parse(trimmed);
+function contentText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content.map((item) => {
+      if (typeof item === "string") return item;
+      if (item && typeof item === "object" && "text" in item && typeof item.text === "string") return item.text;
+      return "";
+    }).join("\n");
+  }
+  return "";
+}
+
+export function extractJson(text: string): unknown {
+  const withoutThinking = text.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+  const unfenced = withoutThinking.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+  try {
+    return JSON.parse(unfenced);
+  } catch {
+    const start = unfenced.indexOf("{");
+    const end = unfenced.lastIndexOf("}");
+    if (start < 0 || end <= start) throw new Error("Response contained no JSON object.");
+    return JSON.parse(unfenced.slice(start, end + 1));
+  }
 }
 
 function isDraft(value: unknown): value is InferenceDraft {
@@ -101,7 +121,7 @@ export class CrusoeAdapter implements InferenceAdapter {
     }
     const body = await response.json() as Record<string, any>;
     try {
-      const draft = extractJson(String(body.choices?.[0]?.message?.content ?? ""));
+      const draft = extractJson(contentText(body.choices?.[0]?.message?.content));
       if (!isDraft(draft)) throw new Error("Response does not match the draft shape.");
       return {
         draft,
