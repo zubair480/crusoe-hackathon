@@ -1,0 +1,10 @@
+{
+  "asset": "MCC-2 · Section 3 · Bucket 4",
+  "device": "K1 contactor, 3-pole, with thermal overload relay",
+  "finding": "L2 line terminal 74.2 °C vs L1 41.8 °C and L3 43.1 °C at 82% load",
+  "severity": "Priority 1 · repair immediately (ΔT > 15 °C between phases)",
+  "likely_cause": "Loose or oxidized L2 lug connection",
+  "action": "De-energize and lock out, re-torque L2 lug to spec, inspect ferrule and contact tips, re-scan under load",
+  "emissivity": 0.95,
+  "camera": "handheld IR, ironbow palette"
+}
