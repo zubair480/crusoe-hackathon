@@ -1,0 +1,21 @@
+{
+  "name": "@thermaldesk/intake",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./plaud": "./src/plaud.ts"
+  },
+  "scripts": {
+    "test": "node --experimental-strip-types --test test/*.test.ts",
+    "plaud:pull": "node --experimental-strip-types scripts/pull-plaud.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.31.0",
+    "@thermaldesk/contracts": "0.1.0"
+  },
+  "engines": {
+    "node": ">=22.6"
+  }
+}
