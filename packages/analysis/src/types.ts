@@ -57,6 +57,13 @@ export interface Part {
   requires_specification_review: boolean;
 }
 
+export interface Approval {
+  reviewer_id: string;
+  recommendation_version: number;
+  approved_at: string;
+  mode: IntegrationMode;
+}
+
 export interface Recommendation {
   schema_version: "1.0";
   case_id: string;
@@ -70,7 +77,7 @@ export interface Recommendation {
   repair_scope: string;
   parts: Part[];
   missing_information: string[];
-  approval: null;
+  approval: Approval | null;
   analysis_mode: IntegrationMode;
   created_at: string;
 }

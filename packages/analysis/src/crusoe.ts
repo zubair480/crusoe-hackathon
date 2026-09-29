@@ -5,6 +5,9 @@ export interface CrusoeAdapterOptions {
   baseUrl?: string;
   model?: string;
   timeoutMs?: number;
+  maxTokens?: number;
+  enableThinking?: boolean;
+  allowLiveRequests?: boolean;
   fetchImpl?: typeof fetch;
   resolveImage?: (evidence: Evidence) => Promise<string>;
 }
@@ -40,12 +43,14 @@ export function extractJson(text: string): unknown {
 function isDraft(value: unknown): value is InferenceDraft {
   if (!value || typeof value !== "object") return false;
   const draft = value as Record<string, unknown>;
-  if (!Array.isArray(draft.findings) || typeof draft.repair_scope !== "string" || !Array.isArray(draft.missing_information)) return false;
+  if (!Array.isArray(draft.findings) || typeof draft.repair_scope !== "string" || !Array.isArray(draft.missing_information) ||
+      !draft.missing_information.every((item) => typeof item === "string")) return false;
   return draft.findings.every((finding) => {
     if (!finding || typeof finding !== "object") return false;
     const item = finding as Record<string, unknown>;
-    return typeof item.description === "string" && Array.isArray(item.evidence_ids) &&
-      ["unassessed", "low", "medium", "high"].includes(String(item.severity)) && Array.isArray(item.uncertainties);
+    return typeof item.description === "string" && Array.isArray(item.evidence_ids) && item.evidence_ids.every((id) => typeof id === "string") &&
+      ["unassessed", "low", "medium", "high"].includes(String(item.severity)) && Array.isArray(item.uncertainties) &&
+      item.uncertainties.every((uncertainty) => typeof uncertainty === "string");
   });
 }
 
@@ -63,6 +68,9 @@ export class CrusoeAdapter implements InferenceAdapter {
   private readonly baseUrl: string;
   private readonly model: string;
   private readonly timeoutMs: number;
+  private readonly maxTokens: number;
+  private readonly enableThinking: boolean;
+  private readonly allowLiveRequests: boolean;
   private readonly fetchImpl: typeof fetch;
   private readonly resolveImage?: (evidence: Evidence) => Promise<string>;
 
@@ -71,17 +79,27 @@ export class CrusoeAdapter implements InferenceAdapter {
     this.baseUrl = (options.baseUrl ?? process.env.CRUSOE_BASE_URL ?? DEFAULT_BASE_URL).replace(/\/$/, "");
     this.model = options.model ?? process.env.CRUSOE_MODEL ?? DEFAULT_MODEL;
     this.timeoutMs = options.timeoutMs ?? Number(process.env.CRUSOE_TIMEOUT_MS ?? 30_000);
+    if (!Number.isInteger(this.timeoutMs) || this.timeoutMs < 1 || this.timeoutMs > 120_000) {
+      throw new Error("Crusoe timeoutMs must be an integer between 1 and 120000.");
+    }
+    this.maxTokens = options.maxTokens ?? Number(process.env.CRUSOE_MAX_TOKENS ?? 1024);
+    if (!Number.isInteger(this.maxTokens) || this.maxTokens < 1 || this.maxTokens > 4096) {
+      throw new Error("Crusoe maxTokens must be an integer between 1 and 4096.");
+    }
+    this.enableThinking = options.enableThinking ?? process.env.CRUSOE_ENABLE_THINKING === "true";
+    this.allowLiveRequests = options.allowLiveRequests ?? process.env.CRUSOE_LIVE_REQUESTS_ENABLED === "true";
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.resolveImage = options.resolveImage;
   }
 
   async analyze(inspection: InspectionPackage): Promise<InferenceResponse> {
     if (!this.apiKey) throw new CrusoeInferenceError("not_configured", "CRUSOE_API_KEY is not configured.");
+    if (!this.allowLiveRequests) throw new CrusoeInferenceError("not_configured", "Live Crusoe requests are disabled.");
     const started = Date.now();
     const evidenceSummary = inspection.evidence.map(({ id, kind, asset_id, text, captured_at }) => ({ id, kind, asset_id, text, captured_at }));
     const content: Array<Record<string, unknown>> = [{
       type: "text",
-      text: `Analyze this inspection as an evidence-linked maintenance draft. Do not approve work, certify safety, infer temperatures from colors, or invent operating conditions or part specifications. Return ONLY JSON with keys findings, repair_scope, and missing_information. Each finding must have description, evidence_ids, severity (unassessed|low|medium|high), and uncertainties. Inspection: ${JSON.stringify({ ...inspection, evidence: evidenceSummary })}`,
+      text: `Analyze this inspection as an evidence-linked maintenance draft. Do not approve work, certify safety, infer temperatures from colors, or invent operating conditions or part specifications. Return ONLY one JSON object with exactly this shape: {"findings":[{"description":"string","evidence_ids":["existing evidence id"],"severity":"unassessed|low|medium|high","uncertainties":["string"]}],"repair_scope":"one cautious string, never an array or object","missing_information":["string"]}. Use only supplied evidence IDs. Inspection: ${JSON.stringify({ ...inspection, evidence: evidenceSummary })}`,
     }];
 
     if (this.resolveImage) {
@@ -101,6 +119,8 @@ export class CrusoeAdapter implements InferenceAdapter {
         body: JSON.stringify({
           model: this.model,
           temperature: 0,
+          max_tokens: this.maxTokens,
+          chat_template_kwargs: { enable_thinking: this.enableThinking },
           messages: [
             { role: "system", content: "You produce cautious, structured draft maintenance analysis for qualified human review." },
             { role: "user", content },
@@ -119,7 +139,12 @@ export class CrusoeAdapter implements InferenceAdapter {
       const detail = (await response.text()).slice(0, 500);
       throw new CrusoeInferenceError(response.status === 429 ? "rate_limited" : "provider_error", `Crusoe returned HTTP ${response.status}: ${detail}`);
     }
-    const body = await response.json() as Record<string, any>;
+    let body: Record<string, any>;
+    try {
+      body = await response.json() as Record<string, any>;
+    } catch {
+      throw new CrusoeInferenceError("malformed_output", "Crusoe returned a non-JSON response.");
+    }
     try {
       const draft = extractJson(contentText(body.choices?.[0]?.message?.content));
       if (!isDraft(draft)) throw new Error("Response does not match the draft shape.");
