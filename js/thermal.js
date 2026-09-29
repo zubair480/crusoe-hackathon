@@ -53,7 +53,7 @@ export class ThermalCam {
           t += (h(sp + fract(time) * 91.) - .5) * .018;        // temporal sensor noise (NETD)
           t += (h(vec2(sp.x, 7.)) - .5) * .008;                // fixed-pattern column noise
           vec2 d = vUv - .5; t -= dot(d,d) * .06;              // lens vignetting reads cooler at the edge
-          t = pow(clamp((t - .02) / .9, 0., 1.), .62);         // camera AGC: stretch the span, lift the midtones
+          t = pow(clamp((t - .02) / .9, 0., 1.), .78);         // camera AGC: stretch the span, lift the midtones
           gl_FragColor = vec4(ironbow(t), 1.);
         }`,
     });

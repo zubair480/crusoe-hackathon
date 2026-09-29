@@ -7,6 +7,7 @@ import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { Bucket, BW, BH, BD, ironbow } from "./bucket.js";
 import { Sim } from "./sim.js";
 import { ThermalCam, tempMaterial, tnorm } from "./thermal.js";
+import { buildProps } from "./props.js";
 
 const host = document.getElementById("host");
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
@@ -143,6 +144,7 @@ const red = new THREE.MeshStandardMaterial({ color: 0xc81d14, roughness: .35 });
 const fe = new THREE.Mesh(new THREE.CylinderGeometry(.09, .09, .55, 16), red); fe.position.set(-10.7, .45, -3); fe.castShadow = true; scene.add(fe);
 box(.8, 1.2, .2, cab, 5.5, 1.5, -11.85, scene); box(.6, .9, .02, new THREE.MeshStandardMaterial({ color: 0x2b2f35 }), 5.5, 1.5, -11.74, scene);
 box(1.2, 2.3, .06, new THREE.MeshStandardMaterial({ color: 0x3a4a5c, roughness: .5, metalness: .3 }), -10.86, 1.15, 2.5, scene).rotation.y = Math.PI / 2;
+const props = buildProps(scene);
 scene.traverse((o) => { if (o.isMesh && !o.userData.bucket) o.userData.static = true; });
 
 // ---------------------------------------------------------------- sim
@@ -179,6 +181,9 @@ function hotLabels(S) {
 // ---------------------------------------------------------------- thermal view
 function setThermal(on) {
   thermal = on; thermalT0 = sim.t; document.body.classList.toggle("thermal", on); document.getElementById("b-thermal").classList.toggle("on", on);
+  thermalMats(on); hotLabels(sim.s);
+}
+function thermalMats(on) {
   scene.background.copy(on ? TBG : BG); scene.fog.color.copy(on ? TBG : BG);
   scene.traverse((o) => {
     if (!o.isMesh || !o.userData.static) return;
@@ -186,7 +191,57 @@ function setThermal(on) {
     else if (o.userData.orig) { o.material.dispose(); o.material = o.userData.orig; }
   });
   for (const b of buckets.values()) b.setThermal(on);
-  hotLabels(sim.s);
+}
+
+// ---------------------------------------------------------------- handheld thermal camera
+// When a bucket is open, a handheld IR camera slides in on the right and shoots the K1 contactor
+// from a fixed macro pose, refreshing about once a second. The main view stays in visible light.
+const dev = { el: document.getElementById("device"), cv: document.getElementById("ir"), b: null, last: -9, shots: 0 };
+const capCam = new THREE.PerspectiveCamera(30, 4 / 3, .01, 60);
+function openDevice(b) {
+  dev.b = b; dev.last = -9; dev.shots++;
+  document.getElementById("ir-file").textContent = `IR_${String(1000 + dev.shots).slice(1)}.jpg`;
+  document.body.classList.add("device"); dev.el.classList.remove("shoot"); void dev.el.offsetWidth; dev.el.classList.add("shoot");
+}
+function closeDevice() { dev.b = null; document.body.classList.remove("device"); }
+function captureIR(t) {
+  const b = dev.b; if (!b || !b.terms || !b.state) return;
+  const c0 = b.group.getWorldPosition(new THREE.Vector3()), m = { pos: c0.clone().add(new THREE.Vector3(.02, .015, .5)), target: c0.clone().add(new THREE.Vector3(0, 0, -.3)) }; capCam.position.copy(m.pos); capCam.lookAt(m.target); capCam.updateMatrixWorld();
+  if (!thermal) thermalMats(true);
+  const gv = b.glow.visible; b.glow.visible = false;
+  tcam.resize(640, 480); tcam.render(scene, capCam, t);
+  b.glow.visible = gv;
+  const g = dev.cv.getContext("2d"), W = dev.cv.width, H = dev.cv.height;
+  g.drawImage(renderer.domElement, 0, 0, W, H);
+  if (!thermal) thermalMats(false);
+  tcam.resize(host.clientWidth, host.clientHeight);
+  // overlays drawn onto the capture like camera firmware does
+  const T = b.state.temps, spot = b.terms.L2.getWorldPosition(new THREE.Vector3()).project(capCam);
+  const x = (spot.x + 1) / 2 * W, y = (1 - spot.y) / 2 * H;
+  const mono = "'JetBrains Mono', Consolas, monospace";
+  g.strokeStyle = "#fff"; g.lineWidth = 2.5; g.shadowColor = "#000"; g.shadowBlur = 3;
+  g.beginPath(); g.arc(x, y, 16, 0, 7); g.moveTo(x - 30, y); g.lineTo(x - 8, y); g.moveTo(x + 8, y); g.lineTo(x + 30, y); g.moveTo(x, y - 30); g.lineTo(x, y - 8); g.moveTo(x, y + 8); g.lineTo(x, y + 30); g.stroke();
+  g.fillStyle = "#fff"; g.font = `bold 26px ${mono}`; g.fillText(`Sp1 ${T.L2.toFixed(1)}°C`, Math.min(W - 250, x + 26), Math.max(34, y - 24));
+  g.font = `bold 20px ${mono}`;
+  const mx = Math.max(T.L1, T.L2, T.L3), d = mx - Math.min(T.L1, T.L2, T.L3);
+  g.fillText(`Max ${mx.toFixed(1)}`, 14, 30); g.fillText(`Min ${sim.amb.toFixed(1)}`, 14, 56); g.fillText("ε 0.95", 14, H - 16);
+  const gr = g.createLinearGradient(0, H - 40, 0, 40);
+  ["#08041c", "#2e066e", "#800a8c", "#c81e6e", "#ec501e", "#fca00a", "#ffe25a", "#fffff0"].forEach((c, i, a) => gr.addColorStop(i / (a.length - 1), c));
+  g.shadowBlur = 0; g.fillStyle = gr; g.fillRect(W - 30, 40, 16, H - 80); g.strokeStyle = "#fff8"; g.lineWidth = 1; g.strokeRect(W - 30, 40, 16, H - 80);
+  g.fillStyle = "#fff"; g.font = `bold 16px ${mono}`; g.textAlign = "right"; g.fillText("80", W - 36, 52); g.fillText("20", W - 36, H - 42); g.textAlign = "left";
+  const $ = (id) => document.getElementById(id), col = (t) => t > 60 ? "#d42a1c" : t > 48 ? "#c77a00" : "#1a8a44";
+  $("ir-tag").textContent = `${b.tag} · ${b.name}`;
+  $("ir-loc").textContent = `${b.lineup} · Section ${b.section} · Bucket ${b.row} · 480 V`;
+  $("ir-dev").textContent = `Breaker + K1 3-pole contactor + OL relay · ${b.fla} A FLA`;
+  $("ir-load").textContent = `${Math.round(b.state.load * 100)}% · ${b.state.amps.map((x) => x.toFixed(0)).join("/")} A`;
+  for (const p of ["L1", "L2", "L3"]) { $("ir-" + p).textContent = T[p].toFixed(1); $("ir-" + p).style.color = col(T[p]); }
+  $("ir-dt").textContent = d.toFixed(1); $("ir-dt").style.color = d > 15 ? "#d42a1c" : "#111";
+  const hot = d > 15, hp = ["L1", "L2", "L3"].reduce((a, p) => T[p] > T[a] ? p : a, "L1");
+  $("ir-verdict").textContent = hot ? "PRIORITY 1 · HOT JOINT" : "NO ANOMALY"; $("ir-verdict").className = "ph-sev " + (hot ? "crit" : "ok");
+  $("ir-finding").textContent = hot ? `${hp} line terminal ${T[hp].toFixed(1)} °C, ${d.toFixed(1)} °C above the coolest phase` : `Phases within ${d.toFixed(1)} °C of each other`;
+  $("ir-action").textContent = hot ? "De-energize, LOTO, re-torque the lug, inspect ferrule and contact tips, re-scan under load." : "No action. Next scan on the quarterly route.";
+  $("ir-wo").textContent = hot ? "Create work order" : "Mark inspected";
+  $("ir-clock").textContent = new Date().toTimeString().slice(0, 5);
 }
 const scaleEl = document.getElementById("scale");
 scaleEl.innerHTML = '<div class="grad"></div>' + [80, 70, 60, 50, 40, 30, 20].map((t, i) => `<span style="top:calc(${i / 6 * 100}% - 7px)">${t}°C</span>`).join("");
@@ -221,10 +276,10 @@ function macroPose(b) {
 }
 // three-stage zoom: 1 approach the line-up, 2 bucket front while the door swings open, 3 K1 macro in thermal
 function select(b) {
-  if (selected && selected !== b) selected.setOpen(false);
+  if (selected && selected !== b) { selected.setOpen(false); closeDevice(); }
   if (!b) {
     selected = null; macro = false; renderPanel(); enterPanel();
-    if (autoThermal && thermal) setThermal(false); autoThermal = false;
+    closeDevice();
     flyPath([{ pos: HOME.pos.clone(), target: HOME.target.clone(), dur: 2.4, lift: 1.4, label: "RETURNING TO OVERVIEW" }]);
     return;
   }
@@ -232,8 +287,8 @@ function select(b) {
   const c = b.group.getWorldPosition(new THREE.Vector3()), v = bucketView(b), m = macroPose(b);
   flyPath([
     { pos: c.clone().add(new THREE.Vector3(1.5, 1.1, 3.1)), target: c.clone().add(new THREE.Vector3(0, -.15, 0)), dur: 1.7, lift: .9, hold: .3, label: `1 / 3 · ${b.lineup} · SECTION ${b.section}` },
-    { pos: v.pos, target: v.target, dur: 1.4, hold: .7, label: `2 / 3 · BUCKET ${b.row} · ${b.tag} ${b.name}`, onStart: () => b.setOpen(true) },
-    { pos: m.pos, target: m.target, dur: 1.5, label: "3 / 3 · K1 CONTACTOR · THERMAL SCAN", onArrive: () => { macro = true; if (!thermal) { autoThermal = true; setThermal(true); } } },
+    { pos: v.pos, target: v.target, dur: 1.4, hold: .9, label: `2 / 3 · BUCKET ${b.row} · ${b.tag} ${b.name}`, onStart: () => b.setOpen(true) },
+    { pos: v.pos, target: v.target, dur: .01, label: "3 / 3 · THERMAL CAPTURE · K1 CONTACTOR", onArrive: () => openDevice(b) },
   ]);
 }
 function macroView(b) {
@@ -344,7 +399,7 @@ renderer.setAnimationLoop(() => {
   simAcc += dt; while (simAcc >= .1) { simAcc -= .1; tickSim(); }
   panelAcc += dt; if (panelAcc > .25) { panelAcc = 0; selected ? livePanel() : (Math.random() < .15 && renderPanel()); }
   for (const b of buckets.values()) if (b.busy) b.update(dt);
-  pulseRing(clock.elapsedTime);
+  pulseRing(clock.elapsedTime); if (!thermal) props.update(dt, clock.elapsedTime);
   if (flight) stepFlight(dt);
   else if (!selected) {
     // drone: after a few idle seconds, drift around the room on a slow orbit with a gentle bob
@@ -360,6 +415,7 @@ renderer.setAnimationLoop(() => {
       camera.position.lerp(dp, k); controls.target.lerp(dtg, k);
     }
   }
+  if (dev.b && clock.elapsedTime - dev.last > 1) { dev.last = clock.elapsedTime; captureIR(clock.elapsedTime); }
   controls.update(); if (thermal) tcam.render(scene, camera, clock.elapsedTime); else renderer.render(scene, camera); css.render(scene, camera);
 });
 renderPanel();
