@@ -1,0 +1,6 @@
+# Zubair owns the shared lockfile; this package pins exact dev versions instead.
+package-lock.json
+node_modules/
+dist/
+# Local job store used by the demo and by local development.
+.data/
