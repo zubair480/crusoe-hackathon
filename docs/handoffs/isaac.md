@@ -1,9 +1,9 @@
 # Isaac handoff
 
-- **Updated (UTC):** 2026-09-29T21:03Z
+- **Updated (UTC):** 2026-09-29T21:22Z
 - **Owner / branch:** Isaac · `codex/isaac-repair-coordination`
 - **Owned paths:** `packages/coordination/`, `docs/handoffs/isaac.md`
-- **Status:** all three increments implemented and tested with SIMULATED adapters only. A Band runtime is implemented and tested in a SIMULATED room; it has NOT been run on Band.
+- **Status:** all three increments implemented and tested with SIMULATED adapters only. A Band runtime is implemented. Its five agents are registered on Band and connected live at 2026-09-29T21:22Z. The full room flow has been verified in a SIMULATED room; on Band itself only the connection is verified so far.
 - **Latest pushed implementation commit:** `65e0fea`
 - **Uncommitted local work:** none
 
@@ -94,7 +94,7 @@ verified closure published to the schedule adapter and the timeline.
 | Calls, SMS, email | not implemented | No live or sandbox adapter exists. |
 | Schedule (Excel) | simulated stand-in | `createSimulatedSchedule`. No workbook was changed. |
 | Job store | local files | Real persistence on local disk. |
-| BAND | not configured | Runtime implemented with `@band-ai/sdk` 0.4.7. No Band account or agent credentials exist, so it has never connected to Band. Verified only in a simulated room. |
+| BAND | live connection | Five agents registered at app.band.ai and connected with `@band-ai/sdk` 0.4.7 at 2026-09-29T21:22Z. The room flow on Band is not yet verified; it is verified in a simulated room. |
 | Baseline runtime | local | In-process job queue. Each job records which runtime it uses. |
 
 Nothing outside this machine changed. No live integration has been exercised.
@@ -116,8 +116,8 @@ critic blocks a purchase and nothing is ordered; a job without parts never recru
 specialist; the appointment follows the handed-over estimate; without the room a Band job
 buys nothing; a request that differs from the recorded one is blocked.
 
-**Blocker for live use (needs a person):** a Band account and five registered agents. Steps
-are in the package README under "Run it on Band".
+Live use: the five agents are registered and `npm run band` connects them. Credentials are in
+the git-ignored `packages/coordination/agent_config.yaml` on Isaac's machine only.
 
 ## Dependencies and requests
 
@@ -153,7 +153,7 @@ are in the package README under "Run it on Band".
 
 ## Remaining issues
 
-- The Band runtime has never connected to Band. Live use needs five registered agents.
+- On Band itself only the connection of the five agents is verified, not yet a full room flow.
 - The app does not post job events into the Band room by itself; a person writes `update <job id>`.
 - No live or sandbox communication adapter. A real channel needs an account, credentials and
   an explicit list of consenting recipients.
@@ -167,7 +167,7 @@ are in the package README under "Run it on Band".
 
 ## Blockers
 
-Band live run: no Band account or agent credentials. Nothing else is blocked.
+None.
 
 ## Traces from `npm run demo` (all integrations simulated)
 

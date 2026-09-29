@@ -7,8 +7,9 @@ Every supplier, messaging and schedule adapter shipped here is **simulated**. No
 technician, manager or workbook is contacted.
 
 A job runs on one of two runtimes, recorded with the job: `job_queue` (baseline) or `band`.
-The Band runtime is implemented and tested against a simulated room. **It has not been run on
-Band itself**: no Band account or agent credentials were available.
+The Band runtime is implemented. Its full flow is tested against a simulated room. On Band
+itself the five agents have been registered and connected; a full room flow on Band is not
+yet verified.
 
 ## Setup
 
@@ -207,6 +208,6 @@ Requires Node.js 22.12 or newer.
 - No live or sandbox adapter. Calls, SMS and email are not implemented; the only
   communication adapter is simulated.
 - No real supplier integration.
-- The Band runtime has not been exercised on Band. It is verified only in a simulated room.
+- On Band itself only the connection of the five agents is verified, not a full room flow.
 - The application does not yet post job events into the room by itself; a person writes
   `update <job id>`.
