@@ -29,8 +29,8 @@ export class Sim {
       const k = 1 - Math.exp(-dt / 6);
       for (const ph of ["L1", "L2", "L3"]) s.temps[ph] += (tgt[ph] - s.temps[ph]) * k;
       const avg = (s.temps.L1 + s.temps.L2 + s.temps.L3) / 3, mx = Math.max(s.temps.L1, s.temps.L2, s.temps.L3);
-      s.temps.body = amb + (avg - amb) * .7 + (mx - avg) * .35;
-      s.temps.ol = amb + (avg - amb) * .6;
+      s.temps.body = amb + (avg - amb) * .45 + (mx - avg) * .15;
+      s.temps.ol = amb + (avg - amb) * .35;
       s.temps.brk = amb + (avg - amb) * .45;
       s.temps.back = amb + 2 + (mx - amb) * .12;
       s.temps.door = amb + 1 + (mx - amb) * .22;

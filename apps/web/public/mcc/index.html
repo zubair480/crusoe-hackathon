@@ -78,6 +78,69 @@
     #stage { position:fixed; left:50%; bottom:64px; transform:translate(-50%,8px); opacity:0; transition:opacity .35s, transform .35s; z-index:5; pointer-events:none;
       font:700 15px var(--hud); letter-spacing:4px; text-transform:uppercase; color:#fff; padding:8px 20px; background:rgba(8,11,14,.75); border-left:3px solid var(--amber); white-space:nowrap; text-shadow:0 0 8px #000 }
     #stage.on { opacity:1; transform:translate(-50%,0) }
+    :root { --pw:min(300px, calc((100vh - 70px) * .465)) }
+    #device { position:fixed; top:50%; left:calc(100% - var(--pw) - 28px); width:var(--pw); aspect-ratio:9/19.3; z-index:6; pointer-events:none; opacity:0;
+      transform:translate(40%,-44%) rotate(8deg); transition:left .9s cubic-bezier(.65,0,.25,1), transform .9s cubic-bezier(.65,0,.25,1), opacity .5s; filter:drop-shadow(0 40px 50px #000c) drop-shadow(0 8px 12px #0008) }
+    body.device #device { opacity:1; transform:translate(0,-57%) scale(.94) rotate(-2deg) }
+    body.device.aim #device { left:calc(50% - var(--pw) / 2); transform:translate(0,-50%) scale(1.06) rotate(0deg) perspective(900px) rotateX(4deg) }
+    body.device #scale, body.device #emis { display:none !important }
+    body.device.aim #vig { background:radial-gradient(ellipse at 50% 50%, transparent 30%, rgba(0,0,0,.7) 100%); transition:background .6s }
+    /* titanium frame, black bezel, glass */
+    .frame3 { position:absolute; inset:0; border-radius:calc(var(--pw) * .17); padding:3px;
+      background:linear-gradient(100deg,#6c7076 0%,#e1e4e8 5%,#8a8e94 11%,#4a4d52 40%,#5d6166 60%,#9ea2a7 88%,#e6e8eb 95%,#6c7076 100%);
+      box-shadow:inset 0 0 0 1px #ffffff55, inset 0 -2px 3px #0006 }
+    .bezel { position:relative; height:100%; border-radius:calc(var(--pw) * .16); background:#050506; padding:calc(var(--pw) * .026); box-shadow:inset 0 0 0 1px #1d1f22 }
+    .ph { position:relative; height:100%; border-radius:calc(var(--pw) * .13); overflow:hidden; background:#000; color:#111; font:500 10px/1.3 -apple-system,"SF Pro Text","Segoe UI",sans-serif }
+    .glare { position:absolute; inset:0; border-radius:inherit; pointer-events:none; z-index:9; background:linear-gradient(118deg, rgba(255,255,255,.16) 0%, rgba(255,255,255,.05) 22%, transparent 38%, transparent 70%, rgba(255,255,255,.04) 100%) }
+    .btn-side { position:absolute; width:3px; border-radius:2px; background:linear-gradient(90deg,#3c3f44,#a4a8ad,#55585d) }
+    .island { position:absolute; left:50%; top:calc(var(--pw) * .035); width:31%; height:calc(var(--pw) * .085); transform:translateX(-50%); background:#000; border-radius:99px; z-index:8; box-shadow:inset 0 0 0 1px #111 }
+    .island::after { content:""; position:absolute; right:14%; top:30%; width:calc(var(--pw) * .032); height:calc(var(--pw) * .032); border-radius:50%; background:radial-gradient(circle at 35% 35%,#2b3a5a,#05070b 70%) }
+    .sb { position:absolute; left:0; right:0; top:0; height:calc(var(--pw) * .15); display:flex; justify-content:space-between; align-items:center; padding:0 9% 0 11%; font:600 11px -apple-system,"Segoe UI",sans-serif; z-index:7 }
+    .sb .ic { display:flex; gap:4px; align-items:center } .sig { display:flex; gap:1.5px; align-items:flex-end; height:8px } .sig i { width:2.5px; background:currentColor; border-radius:1px } .sig i:nth-child(1){height:3px}.sig i:nth-child(2){height:5px}.sig i:nth-child(3){height:6.5px}.sig i:nth-child(4){height:8px}
+    .bat { width:19px; height:9px; border:1.2px solid currentColor; border-radius:3px; padding:1px; opacity:.9 } .bat i { display:block; height:100%; width:82%; background:currentColor; border-radius:1px }
+    /* camera screen */
+    .scr { position:absolute; inset:0; transition:opacity .35s }
+    .cam { background:#000; color:#fff; display:flex; flex-direction:column }
+    body.device:not(.aim) .cam, body.device.aim .rep { opacity:0 }
+    .cam .vf { position:absolute; left:0; right:0; top:15%; bottom:22%; overflow:hidden } .cam .vf canvas { width:100%; height:100%; object-fit:cover; display:block }
+    .cam .modes { position:absolute; left:0; right:0; bottom:15%; display:flex; justify-content:center; gap:14px; font:600 9px -apple-system,"Segoe UI",sans-serif; letter-spacing:1px; color:#bbb } .cam .modes b { color:#ffcc00 }
+    .cam .top { position:absolute; top:10%; left:0; right:0; display:flex; justify-content:center; gap:8px; font:700 9px var(--mono) } .cam .top span { background:#0009; padding:2px 7px; border-radius:9px }
+    .shutter { position:absolute; left:50%; bottom:4.5%; width:calc(var(--pw) * .2); height:calc(var(--pw) * .2); transform:translateX(-50%); border-radius:50%; border:3px solid #fff; padding:3px } .shutter i { display:block; width:100%; height:100%; border-radius:50%; background:#fff; transition:transform .12s }
+    #device.fire .shutter i { transform:scale(.82) }
+    .thumb { position:absolute; left:10%; bottom:6%; width:calc(var(--pw) * .13); height:calc(var(--pw) * .13); border-radius:6px; background:#222; border:1.5px solid #fff; overflow:hidden } .thumb canvas { width:100%; height:100%; object-fit:cover }
+    .flash { position:absolute; inset:0; background:#fff; opacity:0; z-index:6; pointer-events:none } #device.fire .flash { animation:flash .5s ease-out } @keyframes flash { 0% { opacity:1 } 100% { opacity:0 } }
+    /* report screen */
+    .rep { background:#f2f2f7; display:flex; flex-direction:column; padding-top:calc(var(--pw) * .15) }
+    .rep .nav { display:flex; justify-content:space-between; align-items:center; padding:0 9px 5px } .rep .nav a { color:#0a6cff; font-size:10.5px } .rep .nav b { font-size:11.5px }
+    .rep .chip { font:700 8px var(--mono); padding:2px 5px; border-radius:4px; background:#e5352b; color:#fff; letter-spacing:.5px }
+    .steps { display:grid; grid-template-columns:repeat(4,1fr); gap:3px; padding:0 9px 6px } .steps div { text-align:center; font-size:8px; color:#8e8e93; font-weight:600 }
+    .steps div i { display:block; height:3px; border-radius:2px; background:#d1d1d6; margin-bottom:3px } .steps .done i { background:#34c759 } .steps .done { color:#1c7c3a } .steps .cur i { background:#0a6cff; animation:cur 1.2s ease-in-out infinite } .steps .cur { color:#0a6cff } @keyframes cur { 50% { opacity:.4 } }
+    .rb { flex:1; overflow:hidden; padding:0 8px 8px; display:flex; flex-direction:column; gap:6px; scroll-behavior:smooth }
+    .img { position:relative; border-radius:10px; overflow:hidden; flex:none; background:#000 } .img canvas { display:block; width:100%; aspect-ratio:4/3 }
+    .img .tag { position:absolute; left:6px; bottom:5px; font:700 8px var(--mono); color:#fff; text-shadow:0 0 3px #000 }
+    .cd { background:#fff; border-radius:10px; padding:7px 9px; flex:none } .cd h4 { margin:0; font-size:11.5px } .cd .m { color:#6e6e73; font-size:9px } .cd .t { font-size:8.5px; font-weight:700; color:#8e8e93; letter-spacing:.6px; text-transform:uppercase; margin-bottom:4px }
+    .tbl { width:100%; border-collapse:collapse; font-size:9px } .tbl td { padding:2.5px 0; border-top:1px solid #f0f0f3 } .tbl tr:first-child td { border-top:0 } .tbl td:first-child { color:#8e8e93; font:700 8.5px var(--mono); width:20px } .tbl td:last-child { text-align:right; font:700 9.5px var(--mono) }
+    .sev { display:inline-block; font-size:8.5px; font-weight:700; padding:2px 6px; border-radius:8px } .sev.crit { background:#ffe3e0; color:#c4271b } .sev.ok { background:#dcf7e4; color:#1a8a44 }
+    .fnd { font-size:10px; font-weight:600; margin-top:3px } .act { color:#48484a; font-size:9px; margin-top:2px }
+    .rbtn { display:grid; grid-template-columns:1fr 1.7fr; gap:5px; padding:6px 8px 4px; background:#f2f2f7 } .rbtn span { text-align:center; padding:7px; border-radius:9px; font-weight:700; font-size:10px } .rbtn .s { background:#e3e3e8 } .rbtn .p { background:#0a6cff; color:#fff }
+    .home { width:34%; height:4px; border-radius:3px; background:#111; margin:3px auto 6px; flex:none } .cam .home { position:absolute; left:33%; bottom:1.2%; background:#fff; margin:0 }
+    body.device:not(.aim) .rep .cd { animation:slideUp .5s cubic-bezier(.2,.8,.2,1) both } .rep .cd:nth-child(3) { animation-delay:.1s } .rep .cd:nth-child(4) { animation-delay:.2s } .rep .cd:nth-child(5) { animation-delay:.3s }
+    @keyframes slideUp { from { opacity:0; transform:translateY(10px) } }
+    .btn.start { background:linear-gradient(90deg,#ffc440,#ff9a1f); color:#111; border-left-color:#fff; animation:startGlow 2s ease-in-out infinite } .btn.start kbd { color:#5a3b00; border-color:#0003 }
+    @keyframes startGlow { 50% { box-shadow:0 0 18px #ffc44088 } }
+    .uppin { pointer-events:auto; transform:translate(50%,0); display:flex; flex-direction:column; gap:6px; padding:10px; width:210px; background:rgba(8,11,14,.86); backdrop-filter:blur(6px); border-left:2px solid var(--amber);
+      clip-path:polygon(0 0,calc(100% - 12px) 0,100% 12px,100% 100%,12px 100%,0 calc(100% - 12px)); font:500 11px var(--hud) }
+    .uppin::before { content:"CONTACTOR K1 · READY FOR IR"; font:700 9px var(--mono); letter-spacing:1.5px; color:var(--amber) }
+    .uppin.in { animation:pinIn .55s cubic-bezier(.2,.9,.25,1.2) both } @keyframes pinIn { from { opacity:0; transform:translate(50%,0) translateX(-30px) scale(.9) } }
+    .uppin button { cursor:pointer; border:0; font:700 12px var(--hud); letter-spacing:1.5px; text-transform:uppercase; padding:10px 12px; text-align:left; transition:transform .15s, background .2s }
+    .uppin button:active { transform:scale(.97) } .uppin .up-main { background:linear-gradient(90deg,#ffc440,#ff9a1f); color:#111; animation:startGlow 1.6s ease-in-out infinite } .uppin .up-main b { font-size:15px; margin-right:6px }
+    .uppin .up-alt { background:#1b2129; color:var(--fg); font-size:10.5px } .uppin .up-alt:hover { background:#27303b }
+    .uppin .up-plaud { background:#202a36; color:#8bd7ff; border:1px solid #8bd7ff55; font-size:10.5px } .uppin .up-plaud:hover { background:#29394a } .uppin .up-plaud:disabled { opacity:.55; cursor:wait }
+    .uppin small { color:var(--dim); font:500 10px var(--mono) }
+    body.dropping #host::after { content:"DROP IR IMAGE TO ANALYZE"; position:fixed; inset:12px; border:2px dashed var(--amber); display:grid; place-items:center; font:700 22px var(--hud); letter-spacing:4px; color:var(--amber); background:#0008; z-index:8; pointer-events:none }
+    .vf .scan { position:absolute; left:0; right:0; height:22%; top:-22%; background:linear-gradient(transparent, rgba(92,240,138,.35) 80%, rgba(160,255,190,.9)); display:none; mix-blend-mode:screen }
+    body.scanning .vf .scan { display:block; animation:scan 1.1s linear infinite } @keyframes scan { to { top:100% } }
+    #r-ai b { color:#111 } #r-ai .f { margin-top:4px; padding-top:4px; border-top:1px solid #f0f0f3 } .spin { display:inline-block; width:9px; height:9px; border:2px solid #0a6cff; border-right-color:transparent; border-radius:50%; animation:sp .7s linear infinite; vertical-align:-1px; margin-right:4px } @keyframes sp { to { transform:rotate(360deg) } }
     #tip { position:fixed; pointer-events:none; z-index:6; padding:6px 10px; font:500 11px var(--mono); display:none; background:rgba(8,11,14,.9); border-left:2px solid var(--amber) }
     #tip b { font:700 12px var(--hud); letter-spacing:1px }
   </style>
@@ -92,6 +155,7 @@
     <div class="frame stat"><div class="k">Sim clock</div><div class="v" id="c-t">0.0</div></div>
     <div class="sp"></div>
     <span class="simtag">SIMULATED</span>
+    <button class="btn start" id="b-start">Start inspection<kbd>S</kbd></button>
     <button class="btn" id="b-home">Overview<kbd>ESC</kbd></button>
     <button class="btn" id="b-thermal">Thermal<kbd>T</kbd></button>
   </div>
@@ -100,7 +164,38 @@
   <div id="keys" class="frame"><span><b>DRAG</b>orbit</span><span><b>WHEEL</b>zoom</span><span><b>CLICK</b>open bucket</span><span><b>CLICK K1</b>close-up</span><span><b>T</b>thermal</span></div>
   <div id="tip"></div>
   <div id="stage"></div>
-  <script type="module" src="./js/app.js"></script>
+  <div id="device"><div class="frame3">
+    <i class="btn-side" style="left:-2px;top:17%;height:5%"></i><i class="btn-side" style="left:-2px;top:25%;height:9%"></i><i class="btn-side" style="left:-2px;top:36%;height:9%"></i><i class="btn-side" style="right:-2px;top:27%;height:14%"></i>
+    <div class="bezel"><div class="ph">
+      <div class="island"></div>
+      <div class="scr cam">
+        <div class="sb" style="color:#fff"><span class="clk">9:41</span><span class="ic"><span class="sig"><i></i><i></i><i></i><i></i></span>5G<span class="bat"><i></i></span></span></div>
+        <div class="top"><span>IR 640×480</span><span>ε 0.95</span><span id="cam-sp">Sp –</span></div>
+        <div class="vf"><canvas id="ir" width="640" height="480"></canvas><div class="scan"></div></div>
+        <div class="modes"><span>VISIBLE</span><b>THERMAL</b><span>MSX</span><span>VIDEO</span></div>
+        <div class="thumb"><canvas id="ir-thumb" width="160" height="120"></canvas></div>
+        <div class="shutter"><i></i></div>
+        <div class="flash"></div><div class="home"></div>
+      </div>
+      <div class="scr rep">
+        <div class="sb"><span class="clk">9:41</span><span class="ic"><span class="sig"><i></i><i></i><i></i><i></i></span>5G<span class="bat"><i></i></span></span></div>
+        <div class="nav"><a>‹ Route 4</a><b id="r-no">Inspection #014</b><span class="chip" id="r-chip">P1</span></div>
+        <div class="steps"><div class="done" id="s1"><i></i>Captured</div><div class="done" id="s2"><i></i>Analyzed</div><div class="cur" id="s3"><i></i>Work order</div><div id="s4"><i></i>Verified</div></div>
+        <div class="rb" id="r-body">
+          <div class="img"><canvas id="ir-shot" width="640" height="480"></canvas><div class="tag" id="r-file">IR_0014.jpg</div></div>
+          <div class="cd"><h4 id="r-tag">–</h4><div class="m" id="r-loc">–</div><div class="m" id="r-np">–</div></div>
+          <div class="cd"><div class="t">Measurements</div><table class="tbl" id="r-tbl"></table></div>
+          <div class="cd"><span class="sev ok" id="r-sev">–</span><div class="fnd" id="r-fnd">–</div><div class="act" id="r-act">–</div></div>
+          <div class="cd" id="r-aicd"><div class="t">Backend analysis</div><div id="r-ai" class="m">–</div></div>
+          <div class="cd"><div class="t">Camera &amp; conditions</div><table class="tbl" id="r-cond"></table></div>
+        </div>
+        <div class="rbtn"><span class="s">Retake</span><span class="p" id="r-wo">Create work order</span></div>
+        <div class="home"></div>
+      </div>
+      <div class="glare"></div>
+    </div></div>
+  </div></div>
+  <script type="module" src="./js/app.js?v=live3"></script>
   <script type="module" src="./js/integration.js"></script>
 </body>
 </html>

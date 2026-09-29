@@ -7,6 +7,7 @@ import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { Bucket, BW, BH, BD, ironbow } from "./bucket.js";
 import { Sim } from "./sim.js";
 import { ThermalCam, tempMaterial, tnorm } from "./thermal.js";
+import { buildProps } from "./props.js";
 
 const host = document.getElementById("host");
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
@@ -143,6 +144,7 @@ const red = new THREE.MeshStandardMaterial({ color: 0xc81d14, roughness: .35 });
 const fe = new THREE.Mesh(new THREE.CylinderGeometry(.09, .09, .55, 16), red); fe.position.set(-10.7, .45, -3); fe.castShadow = true; scene.add(fe);
 box(.8, 1.2, .2, cab, 5.5, 1.5, -11.85, scene); box(.6, .9, .02, new THREE.MeshStandardMaterial({ color: 0x2b2f35 }), 5.5, 1.5, -11.74, scene);
 box(1.2, 2.3, .06, new THREE.MeshStandardMaterial({ color: 0x3a4a5c, roughness: .5, metalness: .3 }), -10.86, 1.15, 2.5, scene).rotation.y = Math.PI / 2;
+const props = buildProps(scene);
 scene.traverse((o) => { if (o.isMesh && !o.userData.bucket) o.userData.static = true; });
 
 // ---------------------------------------------------------------- sim
@@ -179,6 +181,9 @@ function hotLabels(S) {
 // ---------------------------------------------------------------- thermal view
 function setThermal(on) {
   thermal = on; thermalT0 = sim.t; document.body.classList.toggle("thermal", on); document.getElementById("b-thermal").classList.toggle("on", on);
+  thermalMats(on); hotLabels(sim.s);
+}
+function thermalMats(on) {
   scene.background.copy(on ? TBG : BG); scene.fog.color.copy(on ? TBG : BG);
   scene.traverse((o) => {
     if (!o.isMesh || !o.userData.static) return;
@@ -186,10 +191,284 @@ function setThermal(on) {
     else if (o.userData.orig) { o.material.dispose(); o.material = o.userData.orig; }
   });
   for (const b of buckets.values()) b.setThermal(on);
-  hotLabels(sim.s);
 }
-const scaleEl = document.getElementById("scale");
-scaleEl.innerHTML = '<div class="grad"></div>' + [80, 70, 60, 50, 40, 30, 20].map((t, i) => `<span style="top:calc(${i / 6 * 100}% - 7px)">${t}°C</span>`).join("");
+
+// ---------------------------------------------------------------- handheld thermal camera
+// When a bucket is open, a handheld IR camera slides in on the right and shoots the K1 contactor
+// from a fixed macro pose, refreshing about once a second. The main view stays in visible light.
+const dev = { b: null, mode: null, aimT: 0, last: -9, shots: 13, cv: document.getElementById("ir") };
+const capCam = new THREE.PerspectiveCamera(30, 4 / 3, .01, 60);
+const devEl = document.getElementById("device"), $ = (id) => document.getElementById(id);
+// phone rises to the center, shows a live IR viewfinder, fires the shutter, then docks right as the report
+function openDevice(b) {
+  $("s1").innerHTML = "<i></i>Captured"; ["done", "done", "cur", ""].forEach((c, i) => $("s" + (i + 1)).className = c); $("r-ai").textContent = "Demo capture. Upload a real image to run backend analysis.";
+  dev.b = b; dev.mode = "aim"; dev.aimT = 0; dev.last = -9; dev.shots++;
+  document.body.classList.add("device", "aim"); $("r-body").scrollTop = 0;
+}
+function closeDevice() { dev.b = null; dev.mode = null; document.body.classList.remove("device", "aim", "scanning"); }
+function shoot() {
+  const b = dev.b; dev.mode = "shot";
+  devEl.classList.remove("fire"); void devEl.offsetWidth; devEl.classList.add("fire");
+  $("ir-shot").getContext("2d").drawImage(dev.cv, 0, 0); $("ir-thumb").getContext("2d").drawImage(dev.cv, 0, 0, 160, 120);
+  fillReport(b);
+  setTimeout(() => { if (dev.b === b) document.body.classList.remove("aim"); }, 650);
+  setTimeout(() => { if (dev.b === b) scrollReport(); }, 2600);
+}
+function scrollReport() {
+  const el = $("r-body"), end = el.scrollHeight - el.clientHeight; let t0 = null;
+  const step = (ts) => { if (!dev.b) return; t0 ??= ts; const u = Math.min(1, (ts - t0) / 5000); el.scrollTop = end * (u < .5 ? 2 * u * u : 1 - (-2 * u + 2) ** 2 / 2); if (u < 1) requestAnimationFrame(step); };
+  requestAnimationFrame(step);
+}
+function fillReport(b) {
+  const s = b.state, T = s.temps, ph = ["L1", "L2", "L3"], mx = Math.max(...ph.map((p) => T[p])), mn = Math.min(...ph.map((p) => T[p]));
+  const hp = ph.reduce((a, p) => T[p] > T[a] ? p : a, "L1"), cp = ph.reduce((a, p) => T[p] < T[a] ? p : a, "L1"), d = mx - mn, hot = d > 15;
+  const no = String(dev.shots).padStart(3, "0"), now = new Date();
+  const col = (t) => t > 60 ? "#d42a1c" : t > 48 ? "#b86e00" : "#1a8a44";
+  $("r-no").textContent = `Inspection #${no}`; $("r-file").textContent = `IR_${String(dev.shots).padStart(4, "0")}.jpg · ${now.toTimeString().slice(0, 8)}`;
+  $("r-chip").textContent = hot ? "P1" : "OK"; $("r-chip").style.background = hot ? "#e5352b" : "#34c759";
+  $("r-tag").textContent = `${b.tag} · ${b.name}`;
+  $("r-loc").textContent = `${b.lineup} · Sec ${b.section} · Bkt ${b.row} · 480 V 3Φ 60 Hz`;
+  $("r-np").textContent = `MCCB 50 A · K1 3-pole contactor 32 A AC-3 · coil 120 VAC · OL ${(b.fla * .9).toFixed(0)}–${(b.fla * 1.2).toFixed(0)} A`;
+  const rows = [
+    ["01", "Sp1 · L1 line terminal", T.L1.toFixed(1) + " °C", col(T.L1)],
+    ["02", "Sp2 · L2 line terminal", T.L2.toFixed(1) + " °C", col(T.L2)],
+    ["03", "Sp3 · L3 line terminal", T.L3.toFixed(1) + " °C", col(T.L3)],
+    ["04", "Bx1 max / avg", `${mx.toFixed(1)} / ${((T.L1 + T.L2 + T.L3) / 3).toFixed(1)} °C`],
+    ["05", `ΔT ${hp}–${cp}`, d.toFixed(1) + " °C", hot ? "#d42a1c" : "#111"],
+    ["06", "Contactor body", T.body.toFixed(1) + " °C"],
+    ["07", "Overload relay", T.ol.toFixed(1) + " °C"],
+    ["08", "Breaker case", T.brk.toFixed(1) + " °C"],
+    ["09", "Load current L1/L2/L3", s.amps.map((x) => x.toFixed(1)).join(" / ") + " A"],
+    ["10", "Load vs FLA", Math.round(s.load * 100) + " %"],
+  ];
+  $("r-tbl").innerHTML = rows.map(([n, k, v, c]) => `<tr><td>${n}</td><td>${k}</td><td style="color:${c || "#111"}">${v}</td></tr>`).join("");
+  $("r-cond").innerHTML = [["Ambient", sim.amb.toFixed(1) + " °C"], ["Reflected temp", "27.0 °C"], ["Emissivity", "0.95"], ["Distance", "0.5 m"], ["Rel. humidity", "42 %"], ["Camera", "640×480 · NETD <30 mK"], ["Inspector", "Route 4 · Z. Zafar"]]
+    .map(([k, v], i) => `<tr><td>${String(11 + i)}</td><td>${k}</td><td>${v}</td></tr>`).join("");
+  $("r-sev").textContent = hot ? "PRIORITY 1 · REPAIR IMMEDIATELY" : "NO ANOMALY"; $("r-sev").className = "sev " + (hot ? "crit" : "ok");
+  $("r-fnd").textContent = hot ? `${hp} line terminal ${T[hp].toFixed(1)} °C, ${d.toFixed(1)} °C above ${cp} under ${Math.round(s.load * 100)}% load. Likely loose or oxidized lug.` : `All three phases within ${d.toFixed(1)} °C.`;
+  $("r-act").textContent = hot ? "De-energize and LOTO, re-torque lug to spec, inspect ferrule and contact tips, re-scan under load." : "No action. Next scan on the quarterly route.";
+  $("r-wo").textContent = hot ? "Create work order" : "Mark inspected";
+}
+function captureIR(t) {
+  const b = dev.b; if (!b || !b.terms || !b.state) return;
+  const c0 = b.group.getWorldPosition(new THREE.Vector3());
+  capCam.position.copy(c0).add(new THREE.Vector3(.02, .015, .5)); capCam.lookAt(c0.clone().add(new THREE.Vector3(0, 0, -.3))); capCam.updateMatrixWorld();
+  const gv = b.glow.visible; b.glow.visible = false;
+  if (!thermal) thermalMats(true);
+  tcam.resize(640, 480); tcam.render(scene, capCam, t);
+  const g = dev.cv.getContext("2d"), W = dev.cv.width, H = dev.cv.height;
+  g.drawImage(renderer.domElement, 0, 0, W, H);
+  if (!thermal) thermalMats(false);
+  b.glow.visible = gv; tcam.resize(host.clientWidth, host.clientHeight);
+  const T = b.state.temps, mono = "'JetBrains Mono', Consolas, monospace";
+  g.shadowColor = "#000"; g.shadowBlur = 3; g.strokeStyle = "#fff"; g.fillStyle = "#fff";
+  ["L1", "L2", "L3"].forEach((p, i) => {
+    const q = b.terms[p].getWorldPosition(new THREE.Vector3()).project(capCam), x = (q.x + 1) / 2 * W, y = (1 - q.y) / 2 * H, big = p === "L2";
+    const r = big ? 11 : 7; g.lineWidth = big ? 2.5 : 1.8;
+    g.beginPath(); g.moveTo(x - r * 2, y); g.lineTo(x - r * .5, y); g.moveTo(x + r * .5, y); g.lineTo(x + r * 2, y); g.moveTo(x, y - r * 2); g.lineTo(x, y - r * .5); g.moveTo(x, y + r * .5); g.lineTo(x, y + r * 2); g.stroke();
+    g.font = `bold ${big ? 22 : 16}px ${mono}`; g.fillText(`Sp${i + 1} ${T[p].toFixed(1)}`, x - 40 + (i - 1) * 55, y - 34 - (big ? 18 : 0) - (i === 0 ? 20 : 0));
+  });
+  // measurement box around the contactor
+  const bx = b.contactor.getWorldPosition(new THREE.Vector3()).project(capCam), bxX = (bx.x + 1) / 2 * W, bxY = (1 - bx.y) / 2 * H;
+  g.lineWidth = 1.5; g.setLineDash([6, 4]); g.strokeRect(bxX - 70, bxY - 95, 140, 175); g.setLineDash([]);
+  const mx = Math.max(T.L1, T.L2, T.L3);
+  g.font = `bold 18px ${mono}`; g.fillText(`Bx1 Max ${mx.toFixed(1)}`, 14, 28); g.fillText(`ΔT ${(mx - Math.min(T.L1, T.L2, T.L3)).toFixed(1)}`, 14, 52); g.fillText("ε 0.95", 14, H - 14);
+  const gr = g.createLinearGradient(0, H - 40, 0, 40);
+  ["#08041c", "#2e066e", "#800a8c", "#c81e6e", "#ec501e", "#fca00a", "#ffe25a", "#fffff0"].forEach((c, i, a) => gr.addColorStop(i / (a.length - 1), c));
+  g.shadowBlur = 0; g.fillStyle = gr; g.fillRect(W - 28, 40, 14, H - 80); g.strokeStyle = "#fff8"; g.lineWidth = 1; g.strokeRect(W - 28, 40, 14, H - 80);
+  g.fillStyle = "#fff"; g.font = `bold 15px ${mono}`; g.textAlign = "right"; g.fillText("80", W - 34, 52); g.fillText("20", W - 34, H - 42); g.textAlign = "left";
+  $("cam-sp").textContent = `Sp2 ${T.L2.toFixed(1)}°C`;
+  document.querySelectorAll("#device .clk").forEach((e) => e.textContent = new Date().toTimeString().slice(0, 5));
+}
+
+// ---------------------------------------------------------------- upload + analysis
+// The open bucket gets an Upload pin in the 3D scene. An uploaded IR image is analyzed on the device
+// (hotspot from the actual pixels) and sent to the ThermalDesk backend: /api/evidence, then "analyze".
+const API = new URLSearchParams(location.search).get("api") || (() => { try { return localStorage.getItem("thermaldesk-api"); } catch { return null; } })() || "http://127.0.0.1:3001";
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const fileIn = Object.assign(document.createElement("input"), { type: "file", accept: "image/png,image/jpeg", hidden: true });
+document.body.append(fileIn);
+fileIn.onchange = () => { const f = fileIn.files[0]; fileIn.value = ""; if (f) analyzeUpload(f); };
+const upEl = document.createElement("div"); upEl.className = "uppin";
+upEl.innerHTML = `<button class="up-main"><b>⇪</b>Upload IR image</button><button class="up-plaud">Import latest Plaud recording</button><button class="up-alt">Capture with phone (demo)</button><small>or drop a PNG / JPEG on the scene</small>`;
+upEl.addEventListener("pointerdown", (e) => e.stopPropagation());
+upEl.querySelector(".up-main").onclick = (e) => { e.stopPropagation(); fileIn.click(); };
+upEl.querySelector(".up-plaud").onclick = async (e) => {
+  e.stopPropagation();
+  const button = e.currentTarget, original = button.textContent;
+  button.disabled = true; button.textContent = "Importing Plaud…";
+  try {
+    const caseResponse = await fetch(API + "/api/case", { cache: "no-store" });
+    const st = await caseResponse.json();
+    if (!caseResponse.ok) throw new Error(st.error || `case ${caseResponse.status}`);
+    const plaudResponse = await fetch(API + "/api/plaud", { cache: "no-store" });
+    const plaud = await plaudResponse.json();
+    if (!plaudResponse.ok) throw new Error(plaud.error || `Plaud ${plaudResponse.status}`);
+    const asset = st.inspection?.asset_id;
+    const recording = (plaud.recordings || []).find((item) => (item.asset_mentions || []).includes(asset));
+    if (!recording) throw new Error(`No Plaud recording mentions ${asset || "this asset"}.`);
+    const importResponse = await fetch(API + "/api/plaud", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ recording_id: recording.id, expectedRevision: st.revision }),
+    });
+    const next = await importResponse.json();
+    if (!importResponse.ok) throw new Error(next.error || `Plaud import ${importResponse.status}`);
+    stage("PLAUD RECORDING IMPORTED");
+    window.dispatchEvent(new CustomEvent("thermaldesk:state", { detail: structuredClone(next) }));
+    if (window.thermaldeskWorkflow?.refresh) await window.thermaldeskWorkflow.refresh();
+  } catch (error) {
+    stage(`PLAUD: ${String(error.message || error).toUpperCase()}`);
+  } finally {
+    button.disabled = false; button.textContent = original;
+  }
+};
+upEl.querySelector(".up-alt").onclick = (e) => { e.stopPropagation(); if (selected) { hideUpload(); openDevice(selected); } };
+const upPin = new CSS2DObject(upEl); upPin.visible = false;
+function showUpload(b) { b.group.add(upPin); upPin.position.set(BW / 2 + .02, .06, .04); upPin.visible = true; upEl.classList.remove("in"); void upEl.offsetWidth; upEl.classList.add("in"); }
+function hideUpload() { upPin.visible = false; }
+host.addEventListener("dragover", (e) => { if (selected) { e.preventDefault(); document.body.classList.add("dropping"); } });
+host.addEventListener("dragleave", () => document.body.classList.remove("dropping"));
+host.addEventListener("drop", (e) => { document.body.classList.remove("dropping"); if (!selected) return; e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) analyzeUpload(f); });
+
+// map image colors back onto the ironbow scale (or luminance for white-hot grayscale) and find the hot region
+const LUT = Array.from({ length: 64 }, (_, i) => { const c = ironbow(20 + 60 * i / 63); return [c.r * 255, c.g * 255, c.b * 255]; });
+function analyzePixels(img) {
+  const W = 256, H = Math.max(1, Math.round(256 * img.height / img.width));
+  const c = Object.assign(document.createElement("canvas"), { width: W, height: H }), g = c.getContext("2d");
+  g.drawImage(img, 0, 0, W, H); const d = g.getImageData(0, 0, W, H).data;
+  let sat = 0; for (let i = 0; i < d.length; i += 16) { const mx = Math.max(d[i], d[i + 1], d[i + 2]), mn = Math.min(d[i], d[i + 1], d[i + 2]); sat += mx ? (mx - mn) / mx : 0; }
+  const gray = sat / (d.length / 16) < .08;
+  const heat = new Float32Array(W * H), vals = [];
+  const x0 = Math.floor(W * .05), x1 = Math.floor(W * .88), y0 = Math.floor(H * .06), y1 = Math.floor(H * .94); // skip scale bar and edge text
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = (y * W + x) * 4, r = d[i], gg = d[i + 1], b = d[i + 2];
+    let v;
+    if (gray) v = (.299 * r + .587 * gg + .114 * b) / 255;
+    else { let best = 1e9, bi = 0; for (let k = 0; k < 64; k++) { const L = LUT[k], e = (L[0] - r) ** 2 + (L[1] - gg) ** 2 + (L[2] - b) ** 2; if (e < best) { best = e; bi = k; } } v = bi / 63; }
+    heat[y * W + x] = v; if (x >= x0 && x < x1 && y >= y0 && y < y1) vals.push(v);
+  }
+  const sorted = Float32Array.from(vals).sort(), q = (p) => sorted[Math.min(sorted.length - 1, Math.floor(p * sorted.length))];
+  const med = q(.5), p99 = q(.99), thr = Math.max(p99 - .04, med + (p99 - med) * .75);
+  let sx = 0, sy = 0, n = 0, bx0 = W, by0 = H, bx1 = 0, by1 = 0, peak = 0, px = 0, py = 0;
+  for (let y = Math.max(1, y0); y < Math.min(H - 1, y1); y++) for (let x = Math.max(1, x0); x < Math.min(W - 1, x1); x++) {
+    const v = heat[y * W + x];
+    if (v >= thr) { sx += x; sy += y; n++; bx0 = Math.min(bx0, x); by0 = Math.min(by0, y); bx1 = Math.max(bx1, x); by1 = Math.max(by1, y); }
+    const s = (heat[y * W + x] * 4 + heat[y * W + x - 1] + heat[y * W + x + 1] + heat[(y - 1) * W + x] + heat[(y + 1) * W + x]) / 8;
+    if (s > peak) { peak = s; px = x; py = y; }
+  }
+  const T = (v) => 20 + 60 * v;
+  return { gray, W, H, cx: (n ? sx / n : px) / W, cy: (n ? sy / n : py) / H, px: px / W, py: py / H, box: [bx0 / W, by0 / H, (bx1 + 1) / W, (by1 + 1) / H], areaPct: n / vals.length * 100,
+    peakT: T(peak), medT: T(med), dT: T(peak) - T(med), iw: img.width, ih: img.height };
+}
+function drawContain(g, img, W, H) {
+  const s = Math.min(W / img.width, H / img.height), w = img.width * s, h = img.height * s, ox = (W - w) / 2, oy = (H - h) / 2;
+  g.fillStyle = "#000"; g.fillRect(0, 0, W, H); g.drawImage(img, ox, oy, w, h); return { ox, oy, w, h };
+}
+function drawDetection(g, px, m) {
+  const X = (u) => m.ox + u * m.w, Y = (v) => m.oy + v * m.h, mono = "'JetBrains Mono', Consolas, monospace";
+  const [a, b, c, d] = px.box; g.save(); g.shadowColor = "#000"; g.shadowBlur = 4;
+  g.strokeStyle = "#5cf08a"; g.lineWidth = 2.5; g.setLineDash([8, 5]); g.strokeRect(X(a) - 6, Y(b) - 6, X(c) - X(a) + 12, Y(d) - Y(b) + 12); g.setLineDash([]);
+  const x = X(px.px), y = Y(px.py); g.strokeStyle = "#fff"; g.lineWidth = 2.5;
+  g.beginPath(); g.arc(x, y, 14, 0, 7); g.moveTo(x - 30, y); g.lineTo(x - 8, y); g.moveTo(x + 8, y); g.lineTo(x + 30, y); g.moveTo(x, y - 30); g.lineTo(x, y - 8); g.moveTo(x, y + 8); g.lineTo(x, y + 30); g.stroke();
+  g.fillStyle = "#fff"; g.font = `bold 22px ${mono}`; g.fillText(`HOT ${px.peakT.toFixed(1)}°C est`, Math.min(m.ox + m.w - 250, x + 22), Math.max(28, y - 22));
+  g.font = `bold 16px ${mono}`; g.fillStyle = "#5cf08a"; g.fillText(`ΔT ${px.dT.toFixed(1)} · area ${px.areaPct.toFixed(1)}%`, 12, 470); g.restore();
+}
+async function backendAnalyze(file, ctx) {
+  const get = async () => { const r = await fetch(API + "/api/case", { cache: "no-store" }); if (!r.ok) throw new Error("case " + r.status); return r.json(); };
+  const post = async (body) => { const r = await fetch(API + "/api/case", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status); return j; };
+  const upload = async (f, revision) => {
+    const fd = new FormData(); fd.append("file", f); fd.append("expectedRevision", String(revision));
+    const r = await fetch(API + "/api/evidence", { method: "POST", body: fd }); const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || `upload ${r.status}`); return j;
+  };
+  let st = await get(), note = "";
+  if (st.job || st.recommendation) { st = await post({ command: "reset_demo", expectedRevision: st.revision }); note = "Previous demo case was reset for this inspection."; }
+  // context note: what the HMI knows about this asset, so the model has operating conditions
+  const T = ctx.b.state.temps, A = ctx.b.state.amps, px = ctx.px;
+  const text = [
+    `Asset: ${ctx.b.lineup} section ${ctx.b.section} bucket ${ctx.b.row}, ${ctx.b.tag} ${ctx.b.name}. Device: molded-case breaker, K1 3-pole contactor 32 A AC-3 with thermal overload relay, 480 V 3-phase.`,
+    `Operating condition at capture (HMI telemetry, simulated sensors): load ${Math.round(ctx.b.state.load * 100)}% of ${ctx.b.fla} A FLA; phase currents L1 ${A[0].toFixed(1)} A, L2 ${A[1].toFixed(1)} A, L3 ${A[2].toFixed(1)} A; ambient ${sim.amb} C.`,
+    `Line terminal sensor temperatures (simulated): L1 ${T.L1.toFixed(1)} C, L2 ${T.L2.toFixed(1)} C, L3 ${T.L3.toFixed(1)} C.`,
+    `On-device image screening of ${file.name} (color-based estimate, not radiometric): hottest region at ${Math.round(px.px * px.iw)},${Math.round(px.py * px.ih)} px, about ${px.dT.toFixed(0)} C above background assuming a 20-80 C ironbow scale, ${px.areaPct.toFixed(1)}% of frame.`,
+  ].join("\n");
+  const noteFile = new File([text], `hmi-context-${ctx.b.id}.txt`, { type: "text/plain" });
+  await upload(file, st.revision); st = await get();
+  await upload(noteFile, st.revision); st = await get();
+  const ev = [...st.inspection.evidence].reverse().find((e) => e.source === "upload" && e.kind === "thermal_image");
+  if (!ev) throw new Error("The backend did not record the image.");
+  // Plaud: attach the newest voice note that mentions this case's asset (others are never sent)
+  let voice = null;
+  try {
+    const pl = await (await fetch(API + "/api/plaud", { cache: "no-store" })).json();
+    const asset = st.inspection.asset_id, hit = (pl.recordings || []).find((r) => (r.asset_mentions || []).includes(asset));
+    if (hit) {
+      const r = await fetch(API + "/api/plaud", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ recording_id: hit.id, expectedRevision: st.revision }) });
+      if (r.ok) { st = await r.json(); voice = hit; }
+    }
+  } catch { /* Plaud optional */ }
+  st = await post({ command: "analyze", expectedRevision: st.revision });
+  return { rec: st.recommendation, ev, note, voice };
+}
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
+function renderBackend(res, err) {
+  const el = $("r-ai");
+  if (err) { el.innerHTML = `<span class="sev crit">BACKEND</span> ${esc(err.message)}<div class="f">Backend: ${esc(API)}. On-device result above still stands.</div>`; $("s2").className = "done"; return; }
+  const r = res.rec, sevMap = { high: "crit", medium: "crit", low: "ok", unassessed: "ok" };
+  el.innerHTML = `<b>${esc(r.recommendation_id)}</b> · ${esc(r.status.replace("_", " "))} · mode <b>${esc(r.analysis_mode)}</b>
+    ${res.note ? `<div class="f">${esc(res.note)}</div>` : ""}
+    <div class="f">Evidence ${esc(res.ev.id)} · ${esc(res.ev.kind)}</div>
+    ${res.voice ? `<div class="f"><span class="sev ok">PLAUD · LIVE</span> Voice note ${esc(new Date(res.voice.start_at).toLocaleString())}: “${esc(res.voice.text.replace(/^Speaker \d+:\s*/, "").slice(0, 160))}”</div>` : `<div class="f">No Plaud voice note mentions this asset.</div>`}
+    ${(r.findings || []).map((f) => `<div class="f"><span class="sev ${sevMap[f.severity] || "ok"}">${esc(f.severity.toUpperCase())}</span> ${esc(f.description)}${f.uncertainties?.length ? `<br><i>${esc(f.uncertainties.join(" · "))}</i>` : ""}</div>`).join("")}
+    ${r.repair_scope ? `<div class="f"><b>Scope:</b> ${esc(r.repair_scope)}</div>` : ""}
+    ${r.missing_information?.length ? `<div class="f"><b>Needs:</b> ${esc(r.missing_information.join(" · "))}</div>` : ""}
+    ${r.analysis_mode !== "live" ? `<div class="f">Simulated analysis. Not a live Crusoe call.</div>` : `<div class="f">Live Crusoe draft for qualified review. Not an approval.</div>`}`;
+  $("s2").className = "done"; $("s3").className = "cur";
+}
+async function analyzeUpload(file) {
+  const b = selected; if (!b) return;
+  if (!/^image\/(png|jpeg)$/.test(file.type)) { stage("PNG OR JPEG ONLY"); return; }
+  hideUpload(); dev.b = b; dev.mode = "upload"; dev.shots++;
+  let img; try { img = await createImageBitmap(file); } catch { stage("COULD NOT READ THAT IMAGE"); closeDevice(); showUpload(b); return; }
+  const backend = backendAnalyze(file, { b, px: analyzePixels(img) }).then((r) => ({ r }), (e) => ({ e }));
+  document.body.classList.add("device", "aim", "scanning"); $("r-body").scrollTop = 0;
+  const g = dev.cv.getContext("2d"), m = drawContain(g, img, 640, 480);
+  $("cam-sp").textContent = "ANALYZING…"; stage("3 / 3 · ANALYZING UPLOADED IR IMAGE");
+  const px = analyzePixels(img);
+  await wait(1900); if (dev.b !== b) return;
+  document.body.classList.remove("scanning"); drawDetection(g, px, m);
+  $("cam-sp").textContent = `HOT ${px.peakT.toFixed(1)}°C est`;
+  await wait(900); if (dev.b !== b) return;
+  dev.mode = "shot"; devEl.classList.remove("fire"); void devEl.offsetWidth; devEl.classList.add("fire");
+  $("ir-shot").getContext("2d").drawImage(dev.cv, 0, 0); $("ir-thumb").getContext("2d").drawImage(dev.cv, 0, 0, 160, 120);
+  fillReport(b); fillUpload(b, px, file);
+  $("r-ai").innerHTML = `<span class="spin"></span>Uploading to ${esc(API)} · attaching Plaud voice note · Crusoe vision model analyzing (up to 45 s)…`;
+  setTimeout(() => { if (dev.b === b) document.body.classList.remove("aim"); }, 650);
+  setTimeout(() => { if (dev.b === b) scrollReport(); }, 3200);
+  const out = await backend; if (dev.b !== b) return;
+  renderBackend(out.r, out.e);
+}
+function fillUpload(b, px, file) {
+  const hot = px.dT > 15, T = b.state.temps, col = (t) => t > 60 ? "#d42a1c" : t > 48 ? "#b86e00" : "#1a8a44";
+  $("s1").innerHTML = "<i></i>Uploaded"; $("s1").className = "done"; $("s2").className = "cur"; $("s3").className = ""; $("s4").className = "";
+  $("r-file").textContent = `${file.name} · ${(file.size / 1024).toFixed(0)} KB`;
+  $("r-chip").textContent = hot ? "P1" : "OK"; $("r-chip").style.background = hot ? "#e5352b" : "#34c759";
+  const rows = [
+    ["01", "Hotspot peak (est.)", px.peakT.toFixed(1) + " °C", col(px.peakT)],
+    ["02", "Background median (est.)", px.medT.toFixed(1) + " °C"],
+    ["03", "ΔT hotspot vs background", px.dT.toFixed(1) + " °C", hot ? "#d42a1c" : "#111"],
+    ["04", "Hot region area", px.areaPct.toFixed(1) + " % of frame"],
+    ["05", "Hotspot position", `${Math.round(px.px * px.iw)}, ${Math.round(px.py * px.ih)} px`],
+    ["06", "Palette detected", px.gray ? "grayscale (white-hot)" : "ironbow"],
+    ["07", "Live sensor L1 / L2 / L3 (sim)", `${T.L1.toFixed(1)} / ${T.L2.toFixed(1)} / ${T.L3.toFixed(1)}`],
+    ["08", "Load current (sim)", b.state.amps.map((x) => x.toFixed(1)).join(" / ") + " A"],
+  ];
+  $("r-tbl").innerHTML = rows.map(([n, k, v, c]) => `<tr><td>${n}</td><td>${k}</td><td style="color:${c || "#111"}">${v}</td></tr>`).join("");
+  $("r-cond").innerHTML = [["File", file.name], ["Image size", `${px.iw}×${px.ih}`], ["Temperature scale", "assumed 20–80 °C"], ["Radiometric data", "no (color image)"], ["Uploaded", new Date().toTimeString().slice(0, 8)], ["Backend", API.replace(/^https?:\/\//, "")]]
+    .map(([k, v], i) => `<tr><td>${String(9 + i).padStart(2, "0")}</td><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join("");
+  $("r-sev").textContent = hot ? "PRIORITY 1 · HOT SPOT" : "NO CLEAR ANOMALY"; $("r-sev").className = "sev " + (hot ? "crit" : "ok");
+  $("r-fnd").textContent = hot ? `Hot region about ${px.dT.toFixed(0)} °C above background at the marked point. Estimated from image colors, not radiometric data.` : `Hottest area only ${px.dT.toFixed(1)} °C above background (estimated from colors).`;
+  $("r-act").textContent = hot ? "Confirm with a radiometric scan under load; if confirmed, de-energize, LOTO and re-torque the connection." : "No action from this image. Keep on the quarterly route.";
+}
 
 // ---------------------------------------------------------------- camera flights
 const ease = (u) => u < .5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
@@ -221,10 +500,10 @@ function macroPose(b) {
 }
 // three-stage zoom: 1 approach the line-up, 2 bucket front while the door swings open, 3 K1 macro in thermal
 function select(b) {
-  if (selected && selected !== b) selected.setOpen(false);
+  if (selected && selected !== b) { selected.setOpen(false); closeDevice(); } hideUpload();
   if (!b) {
     selected = null; macro = false; renderPanel(); enterPanel();
-    if (autoThermal && thermal) setThermal(false); autoThermal = false;
+    closeDevice(); hideUpload();
     flyPath([{ pos: HOME.pos.clone(), target: HOME.target.clone(), dur: 2.4, lift: 1.4, label: "RETURNING TO OVERVIEW" }]);
     return;
   }
@@ -232,8 +511,8 @@ function select(b) {
   const c = b.group.getWorldPosition(new THREE.Vector3()), v = bucketView(b), m = macroPose(b);
   flyPath([
     { pos: c.clone().add(new THREE.Vector3(1.5, 1.1, 3.1)), target: c.clone().add(new THREE.Vector3(0, -.15, 0)), dur: 1.7, lift: .9, hold: .3, label: `1 / 3 · ${b.lineup} · SECTION ${b.section}` },
-    { pos: v.pos, target: v.target, dur: 1.4, hold: .7, label: `2 / 3 · BUCKET ${b.row} · ${b.tag} ${b.name}`, onStart: () => b.setOpen(true) },
-    { pos: m.pos, target: m.target, dur: 1.5, label: "3 / 3 · K1 CONTACTOR · THERMAL SCAN", onArrive: () => { macro = true; if (!thermal) { autoThermal = true; setThermal(true); } } },
+    { pos: v.pos, target: v.target, dur: 1.4, hold: .9, label: `2 / 3 · BUCKET ${b.row} · ${b.tag} ${b.name}`, onStart: () => b.setOpen(true) },
+    { pos: v.pos, target: v.target, dur: .01, label: "3 / 3 · UPLOAD IR IMAGE OF K1", onArrive: () => showUpload(b) },
   ]);
 }
 function macroView(b) {
@@ -270,8 +549,9 @@ renderer.domElement.addEventListener("pointermove", (e) => {
   } else tip.style.display = "none";
 });
 document.getElementById("b-home").onclick = () => select(null);
+document.getElementById("b-start").onclick = () => select(buckets.get(HOT));
 document.getElementById("b-thermal").onclick = () => setThermal(!thermal);
-addEventListener("keydown", (e) => { if (e.key === "t" || e.key === "T") setThermal(!thermal); if (e.key === "Escape") select(null); });
+addEventListener("keydown", (e) => { if (e.key === "t" || e.key === "T") setThermal(!thermal); if (e.key === "Escape") select(null); if ((e.key === "s" || e.key === "S") && !selected) select(buckets.get(HOT)); });
 
 // pulsing warning rings on the floor in front of the hot bucket
 const ringM = new THREE.MeshBasicMaterial({ color: 0xff5a1f, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
@@ -344,7 +624,7 @@ renderer.setAnimationLoop(() => {
   simAcc += dt; while (simAcc >= .1) { simAcc -= .1; tickSim(); }
   panelAcc += dt; if (panelAcc > .25) { panelAcc = 0; selected ? livePanel() : (Math.random() < .15 && renderPanel()); }
   for (const b of buckets.values()) if (b.busy) b.update(dt);
-  pulseRing(clock.elapsedTime);
+  pulseRing(clock.elapsedTime); if (!thermal) props.update(dt, clock.elapsedTime);
   if (flight) stepFlight(dt);
   else if (!selected) {
     // drone: after a few idle seconds, drift around the room on a slow orbit with a gentle bob
@@ -360,7 +640,12 @@ renderer.setAnimationLoop(() => {
       camera.position.lerp(dp, k); controls.target.lerp(dtg, k);
     }
   }
+  if (dev.b && dev.mode === "aim") {
+    dev.aimT += dt;
+    if (clock.elapsedTime - dev.last > .2) { dev.last = clock.elapsedTime; captureIR(clock.elapsedTime); }
+    if (dev.aimT > 2.2) shoot();
+  }
   controls.update(); if (thermal) tcam.render(scene, camera, clock.elapsedTime); else renderer.render(scene, camera); css.render(scene, camera);
 });
 renderPanel();
-window.__mcc = { scene, camera, buckets, select, setThermal, sim };
+window.__mcc = { scene, camera, buckets, select, setThermal, sim, analyzeUpload, captureIR, dev };
