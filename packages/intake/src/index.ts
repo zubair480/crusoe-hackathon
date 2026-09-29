@@ -122,3 +122,5 @@ export function collectCompletionEvidence(input: CollectCompletionEvidenceInput)
 }
 
 export type { CompletionEvidence, Evidence, InspectionPackage };
+
+export * from './plaud.ts';

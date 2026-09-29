@@ -10,6 +10,7 @@ import { readSchedule } from '@thermaldesk/excel';
 import ExcelJS from 'exceljs';
 import { createAnalysisPorts } from './analysis-ports';
 import { createCoordinationPorts } from './coordination-ports';
+import { demoPorts, reviewableDemoScope } from './demo-ports';
 
 let directory: string, service: CaseService;
 beforeEach(async () => { directory = await mkdtemp(join(tmpdir(), 'thermaldesk-test-')); service = new CaseService(new CaseStore(directory)); });
@@ -24,6 +25,17 @@ describe('both workflow pipelines', () => {
     await expect(act('approve_scope', 'Reviewer')).rejects.toThrow('missing information');
     await expect(act('coordinate')).rejects.toThrow('Approve');
     expect((await service.read()).job).toBeNull();
+  });
+  it('allows a qualified review step for a complete provider draft without loading the canned scope', async () => {
+    service = new CaseService(new CaseStore(directory), {
+      ...demoPorts,
+      async analyzeInspection() { return { ...reviewableDemoScope(), analysis_mode: 'live' }; },
+    });
+    expect((await act('analyze')).recommendation?.status).toBe('draft');
+    const state = await act('approve_scope', 'Qualified demo reviewer');
+    expect(state.scenarioLoaded).toBe(false);
+    expect(state.recommendation?.status).toBe('approved');
+    expect(state.recommendation?.approval?.recommendation_version).toBe(state.recommendation?.version);
   });
   it('runs review, booking, actual Excel, completion, verification and report with persisted state', async () => {
     let state = await schedule();

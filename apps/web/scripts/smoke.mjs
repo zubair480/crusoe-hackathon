@@ -1,5 +1,6 @@
 // Runs against the local demo only. Use --reset-demo explicitly to rerun an existing case.
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 const base = process.env.THERMALDESK_URL ?? 'http://127.0.0.1:3001';
 if (!['localhost', '127.0.0.1'].includes(new URL(base).hostname)) throw new Error('Smoke test requires a local demo server.');
 const get = async path => { const response = await fetch(base + path); assert.equal(response.status, 200); return response; };
@@ -24,7 +25,16 @@ form.set('file', new File(['Fictional technician note. No measured temperatures 
 form.set('expectedRevision', String(state.revision));
 const upload = await fetch(base + '/api/evidence', { method: 'POST', headers: { Origin: base }, body: form });
 assert.equal(upload.status, 201); state = await upload.json();
-assert.equal((await get('/api/evidence/' + state.inspection.evidence.at(-1).id)).status, 200);
+const noteFile = state.inspection.evidence.at(-1).uri.replace('local-evidence://', '');
+assert.equal((await get('/api/evidence/' + noteFile)).status, 200);
+const pdfForm = new FormData();
+pdfForm.set('file', new File([await readFile(new URL('../../../fixtures/evidence/thermal-report.pdf', import.meta.url))], 'thermal-report.pdf', { type: 'application/pdf' }));
+pdfForm.set('expectedRevision', String(state.revision));
+const pdfUpload = await fetch(base + '/api/evidence', { method: 'POST', headers: { Origin: base }, body: pdfForm });
+const pdfResult = await pdfUpload.json();
+assert.equal(pdfUpload.status, 201, JSON.stringify(pdfResult)); state = pdfResult;
+assert.ok(state.inspection.evidence.some(item => item.uri.endsWith('.pdf')));
+assert.ok(state.inspection.evidence.some(item => item.kind === 'photo' && item.uri.endsWith('.png') && item.text.includes('Rendered page')));
 await action('analyze'); await action('approve_scope', 409); await action('coordinate', 409);
 await action('load_demo_scope'); await action('approve_scope'); await action('coordinate');
 assert.equal(state.job.status, 'scheduled');

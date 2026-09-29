@@ -50,7 +50,7 @@ export class CaseService {
         case 'approve_scope': {
           const rec = state.recommendation;
           if (!rec || rec.status !== 'draft' || rec.missing_information.length) throw new Error('Resolve missing information before approving the current draft.');
-          if (!state.scenarioLoaded || rec.parts.some(p => p.requires_specification_review)) throw new Error('Technical scope is not ready for this demo approval.');
+          if (rec.parts.some(p => p.requires_specification_review)) throw new Error('Resolve every part specification before approving this scope.');
           rec.approval = { reviewer_id: reviewer(), recommendation_version: rec.version, approved_at: new Date().toISOString(), mode: 'simulated' };
           rec.status = 'approved';
           note('Repair scope approved in demo', `${rec.approval.reviewer_id} reviewed version ${rec.version}. No real repair authority granted.`);
@@ -137,12 +137,22 @@ export class CaseService {
     });
   }
   async addEvidence(evidence: Evidence, revision: number): Promise<CaseState> {
+    return this.addEvidenceBatch([evidence], revision);
+  }
+  async addEvidenceBatch(evidence: Evidence[], revision: number): Promise<CaseState> {
+    if (!evidence.length) throw new Error('At least one evidence item is required.');
     return this.store.update(async state => {
       if (state.revision !== revision) throw new Error('Case changed. Refresh before uploading again.');
       if (state.job) throw new Error('Initial inspection is locked once the repair starts.');
-      state.inspection.evidence.push(evidence);
+      state.inspection.evidence.push(...evidence);
+      const hasImage = state.inspection.evidence.some(item => item.kind === 'thermal_image' || item.kind === 'photo');
+      const hasMeasurement = state.inspection.evidence.some(item => item.kind === 'measurement' && /-?\d+(?:\.\d+)?\s*(?:°\s*)?(?:C|F|K|celsius|fahrenheit|kelvin)\b/i.test(item.text ?? ''));
+      state.inspection.missing_information = state.inspection.missing_information.filter(item =>
+        !(hasImage && /radiometric|thermal image/i.test(item)) &&
+        !(hasMeasurement && /calibrated measurement|temperature measurement/i.test(item)),
+      );
       state.recommendation = null; state.scenarioLoaded = false;
-      state.events.push({ id: randomUUID(), at: new Date().toISOString(), title: 'Inspection file added', detail: 'File stored locally. Previous draft invalidated; no automatic diagnosis performed.', mode: 'live' });
+      state.events.push({ id: randomUUID(), at: new Date().toISOString(), title: 'Inspection evidence added', detail: `${evidence.length} evidence item(s) stored locally. Previous draft invalidated; analysis must be requested explicitly.`, mode: 'live' });
       assertContract('InspectionPackage', state.inspection);
       state.revision++;
       return { state, result: state };

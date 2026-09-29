@@ -11,12 +11,13 @@
   },
   "dependencies": {
     "@thermaldesk/analysis": "^0.1.0",
-    "@thermaldesk/coordination": "0.1.0",
     "@thermaldesk/contracts": "0.1.0",
+    "@thermaldesk/coordination": "0.1.0",
     "@thermaldesk/excel": "0.1.0",
     "@thermaldesk/intake": "0.1.0",
     "lucide-react": "^1.48.0",
     "next": "^16.3.7",
+    "pdf-to-img": "^7.0.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
   }
