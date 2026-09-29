@@ -163,6 +163,7 @@ function tickSim() {
 }
 for (let i = 0; i < 20; i++) sim.step(.1);
 for (const [id, s] of sim.s) buckets.get(id).apply(s);
+setTimeout(() => tickSim(), 0);
 
 // floating labels for hot buckets in thermal view
 const hotL = new Map();
@@ -457,7 +458,7 @@ async function analyzeUpload(file) {
   setTimeout(() => { if (dev.b === b) document.body.classList.remove("aim"); }, 650);
   setTimeout(() => { if (dev.b === b) scrollReport(); }, 3200);
   const out = await backend;
-  if (report && report.b === b) { report.res = out.r || null; report.err = out.e || null; report.pending = false; $("b-report").classList.remove("pending"); stage("REPORT READY · PRESS R"); setTimeout(() => stage(""), 2500); }
+  if (report && report.b === b) { report.res = out.r || null; report.err = out.e || null; report.pending = false; if (selected === b) renderPanel(); $("b-report").classList.remove("pending"); stage("REPORT READY · PRESS R"); setTimeout(() => stage(""), 2500); }
   if (dev.b !== b) return;
   renderBackend(out.r, out.e);
 }
@@ -664,7 +665,9 @@ function renderPanel() {
     <h3>Terminal temperature</h3>${["L1", "L2", "L3"].map((p) => `<div><div class="row"><span>${p} line terminal</span><span class="num" id="p-${p}"></span></div><div class="bar"><i id="pb-${p}"></i></div></div>`).join("")}
     <div class="row" style="margin-top:6px"><span>Phase-to-phase ΔT</span><span class="num" id="p-dt"></span></div>
     <h3>Hottest terminal · last 2 min</h3><canvas class="spark" id="spark" width="600" height="140"></canvas>
-    ${b.hot && finding ? `<div class="find"><div class="tag">SIMULATED INSPECTION FINDING</div><div style="margin:4px 0"><b>${finding.finding}</b></div>
+    ${report && report.b === b && report.res?.rec ? `<div class="find"><div class="tag">LIVE CRUSOE FINDING · ${esc(report.res.rec.status.replace("_", " ").toUpperCase())}</div>${report.res.rec.findings.map((f) => `<div style="margin:4px 0"><b>${esc(f.description)}</b></div><div class="sub">Severity: <b style="color:${f.severity === "high" ? "var(--crit)" : "var(--warn)"}">${esc(f.severity)}</b></div>`).join("")}<div class="sub">Scope: ${esc(report.res.rec.repair_scope)}</div><div class="sub">Hotspot ${report.px.peakT.toFixed(1)} °C est · ΔT ${report.px.dT.toFixed(1)} °C · press R for the report</div></div>`
+      : report && report.b === b && report.pending ? `<div class="find"><div class="tag">CRUSOE ANALYZING…</div><div class="sub">Image, HMI context and Plaud note sent. Result appears here.</div></div>`
+      : b.hot && finding ? `<div class="find"><div class="tag">PRIOR INSPECTION FINDING (SIMULATED)</div><div style="margin:4px 0"><b>${finding.finding}</b></div>
       <div class="sub">Severity: <b style="color:var(--crit)">${finding.severity}</b></div><div class="sub">Likely cause: ${finding.likely_cause}</div><div class="sub">Action: ${finding.action}</div><div class="sub">Camera: ${finding.camera}, ε ${finding.emissivity}</div></div>`
       : `<div class="sub" style="margin-top:8px">${dT > 15 ? "ΔT above 15 °C between phases: investigate." : "No thermal anomaly on this bucket."}</div>`}
     <div class="acts"><button class="btn" id="p-macro">Close-up K1</button><button class="btn" id="p-close">Close door</button></div>`;

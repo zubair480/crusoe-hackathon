@@ -78,7 +78,10 @@
     #stage { position:fixed; left:50%; bottom:64px; transform:translate(-50%,8px); opacity:0; transition:opacity .35s, transform .35s; z-index:5; pointer-events:none;
       font:700 15px var(--hud); letter-spacing:4px; text-transform:uppercase; color:#fff; padding:8px 20px; background:rgba(8,11,14,.75); border-left:3px solid var(--amber); white-space:nowrap; text-shadow:0 0 8px #000 }
     #stage.on { opacity:1; transform:translate(-50%,0) }
-    :root { --pw:min(300px, calc((100vh - 70px) * .465)) }
+    :root { --pw:min(270px, calc((100vh - 150px) * .465)) }
+    body.device:not(.aim) #device { top:calc(50% + 34px) }
+    body.device #workflow { right:calc(var(--pw) + 56px) !important; transition:right .6s cubic-bezier(.65,0,.25,1) }
+    #keys span:nth-child(4) { display:none }
     #device { position:fixed; top:50%; left:calc(100% - var(--pw) - 28px); width:var(--pw); aspect-ratio:9/19.3; z-index:6; pointer-events:none; opacity:0;
       transform:translate(40%,-44%) rotate(8deg); transition:left .9s cubic-bezier(.65,0,.25,1), transform .9s cubic-bezier(.65,0,.25,1), opacity .5s; filter:drop-shadow(0 40px 50px #000c) drop-shadow(0 8px 12px #0008) }
     body.device #device { opacity:1; transform:translate(0,-57%) scale(.94) rotate(-2deg) }
@@ -216,7 +219,7 @@
       <div class="glare"></div>
     </div></div>
   </div></div>
-  <script type="module" src="./js/app.js?v=plaud2"></script>
+  <script type="module" src="./js/app.js?v=ui1"></script>
   <script type="module" src="./js/integration.js"></script>
 </body>
 </html>
