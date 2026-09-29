@@ -22,12 +22,24 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "tsc -p tsconfig.json && node --test dist/test/*.test.js",
-    "demo": "tsc -p tsconfig.json && node dist/src/demo.js"
+    "demo": "tsc -p tsconfig.json && node dist/src/demo.js",
+    "band": "tsc -p tsconfig.json && node dist/src/band/run.js",
+    "band:check": "tsc -p tsconfig.json && node dist/src/band/run.js --check",
+    "band:demo": "tsc -p tsconfig.json && node dist/src/band/demo.js"
   },
   "devDependencies": {
+    "@band-ai/sdk": "0.4.7",
     "@types/node": "22.18.6",
     "ajv": "8.20.0",
     "ajv-formats": "3.0.1",
     "typescript": "5.9.3"
+  },
+  "peerDependencies": {
+    "@band-ai/sdk": ">=0.4.7"
+  },
+  "peerDependenciesMeta": {
+    "@band-ai/sdk": {
+      "optional": true
+    }
   }
 }

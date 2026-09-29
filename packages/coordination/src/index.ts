@@ -12,6 +12,7 @@ export {
   listRepairJobs,
   processDueFollowUps,
   runWorkerTick,
+  selectCoordinationRuntime,
 } from './engine.js';
 export { createFileJobRepository, createInMemoryJobRepository } from './repository.js';
 export type { FileJobRepositoryOptions } from './repository.js';
@@ -44,5 +45,20 @@ export {
 export * from './contract.js';
 export * from './types.js';
 
-/** Which runtime executes coordination. BAND is not used. */
-export const COORDINATION_RUNTIME = 'job_queue' as const;
+export {
+  BAND_ROLES,
+  ROLE_CONFIG_KEYS,
+  ROLE_DESCRIPTIONS,
+  decodeEnvelope,
+  encodeEnvelope,
+} from './band/protocol.js';
+export type { BandRole, Envelope, RoomMessage, RoomParticipant, RoomTools } from './band/protocol.js';
+export { createCrewHandler } from './band/crew.js';
+export type { CrewDeps, CrewHandler, CriticPolicy } from './band/crew.js';
+export { startBandCrew } from './band/live.js';
+export type { LiveCrew, LiveCrewOptions } from './band/live.js';
+export { createMemoryRoom } from './band/memory-room.js';
+export type { MemoryRoom, RoomLogEntry } from './band/memory-room.js';
+
+/** The runtimes a job can run on. Each job records the one it uses. */
+export const COORDINATION_RUNTIMES = ['job_queue', 'band'] as const;

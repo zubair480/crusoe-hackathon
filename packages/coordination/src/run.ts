@@ -52,6 +52,8 @@ export class JobRun {
   readonly config: CoordinationConfig;
   private persistedVersion: number;
   private unsaved: TimelineEvent[] = [];
+  /** Optional hand-over data for the current call. Set by coordinateRepair. */
+  handoff: { parts_delivery_estimate: string | null; reference: string | null } | null = null;
   private dirty = false;
 
   constructor(record: JobRecord, context: CoordinationContext) {
@@ -225,6 +227,49 @@ export class JobRun {
     this.record.outcome_evidence.push(evidence);
     this.dirty = true;
     return evidence;
+  }
+
+  /** True when the job runs on Band, where gated actions wait for a critic's verdict. */
+  get requiresVerdicts(): boolean {
+    return this.record.runtime === 'band';
+  }
+
+  /**
+   * The verdict state for one gated action. The first call files the request; the action
+   * stays unexecuted until a verdict is recorded.
+   */
+  verdictFor(
+    logical_key: string,
+    action_type: ActionReceipt['action_type'],
+    summary: string,
+    details: unknown,
+  ): { status: 'pending' | 'approved' | 'blocked'; request_id: string; reason: string | null } {
+    const requests = (this.record.verdict_requests ??= []);
+    const current = [...requests].reverse().find((item) => item.logical_key === logical_key && item.status !== 'superseded');
+    if (current) {
+      return { status: current.status as 'pending' | 'approved' | 'blocked', request_id: current.request_id, reason: current.reason };
+    }
+    this.record.counters.verdict = (this.record.counters.verdict ?? 0) + 1;
+    const request_id = `${this.job.job_id}-VRD-${pad(this.record.counters.verdict)}`;
+    requests.push({
+      request_id,
+      logical_key,
+      action_type,
+      summary,
+      details: clone(details === undefined ? null : details),
+      status: 'pending',
+      requested_at: this.nowIso(),
+      decided_at: null,
+      decided_by: null,
+      reason: null,
+      reference: null,
+    });
+    this.emit({
+      type: 'verdict_requested',
+      summary: `Verdict requested before: ${summary}`,
+      data: { request_id, logical_key, action_type, details },
+    });
+    return { status: 'pending', request_id, reason: null };
   }
 
   nextActionId(): string {
