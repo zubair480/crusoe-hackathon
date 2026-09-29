@@ -1,5 +1,18 @@
 # Zubair handoff
 
+## Isaac branch pull — 2026-09-29 21:55 UTC
+
+Owner: Zubair. Branch: `codex/zubair-app-integration`. Latest pushed implementation: `b77d3cc` (integration fixes in `32442f0`). Isaac's complete branch history through `45fd851` is merged and pushed, including his Band runtime, tests, configuration example, current handoff and `packages/coordination/docs/evidence/band-live-run-2026-09-29.md`. PR #1 was already merged; this increment is being opened as a new PR into main.
+
+- Imported Isaac's package without replacing application routes, frontend or evidence. Kept the existing Windows atomic-rename retry and source type exports. Added the pinned Band SDK to the shared lockfile and externalized it in the Next.js server build because its optional provider adapters are loaded lazily by Node. The initial bundle failure is resolved.
+- Interfaces: existing `createRepairJob(input, context)`, `advanceRepairJob(job_id, event, context)` and `coordinateRepair(job_id, adapters, context, options?)` remain callable. Added Isaac's `selectCoordinationRuntime(job_id, runtime, context)`, `createCrewHandler(role, deps)`, `startBandCrew(options)` and `createMemoryRoom(options)`, plus `action_verdict_recorded`. Exact exported types and signatures are in the coordination package. No shared schema change.
+- Verification: `npm test` passed 69 tests (26 coordination, 10 intake, 23 app/Excel, 10 analysis); `npm run typecheck`, `npm run build` and `npm run test:system` passed. The isolated system run covered approval gates, actual workbook write/read-back, cancellation/rebooking with one purchase, wrong-asset/incomplete rejection, verified closure, report download and origin rejection. Its temporary case closed at revision 17. The final incoming commit changed documentation only.
+- Actual modes: this task ran fixtures and mocked providers with `THERMALDESK_ANALYSIS_MODE=fixture` and `CRUSOE_LIVE_REQUESTS_ENABLED=false`. Local file persistence, workbook writes and report generation were real. Supplier orders, booking, communications and the Band test room were simulated. Isaac's checked-in live Band transcript is his recorded evidence; no live Band connection or paid API call was made here. His private credentials and machine-local runtime data are not in Git and were not copied.
+- Existing unstaged README, product-scope and analysis edits and the untracked competitive-analysis/build-assignment documents were preserved byte-for-byte and excluded from the commits.
+- Blockers: none to this pull. **Isaac:** your latest package and evidence are integrated; the app still uses the default `job_queue` runtime. Automatic app-to-Band room event delivery and the direct coordinator-to-Excel port remain separate integration work. **Claude:** the API/UI contract is unchanged. Both required pipelines remain present and passed the isolated fixture workflow.
+
+## Previous upload/report handoff
+
 Updated: 2026-09-29 21:49 UTC. Owner: Zubair. Branch: `codex/zubair-app-integration`. Latest pushed implementation: `1920dcc`. Existing PR: https://github.com/zubair480/crusoe-hackathon/pull/1.
 
 ## Current upload/report increment
