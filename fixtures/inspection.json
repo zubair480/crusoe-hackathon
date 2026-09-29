@@ -1,0 +1,39 @@
+{
+  "kind": "InspectionPackage",
+  "data": {
+    "schema_version": "1.0",
+    "case_id": "DEMO-CASE-001",
+    "site_id": "DEMO-SITE",
+    "asset_id": "DEMO-A",
+    "inspection_id": "INSPECT-001",
+    "evidence": [
+      {
+        "id": "EV-NOTE-001",
+        "kind": "note",
+        "asset_id": "DEMO-A",
+        "source": "synthetic",
+        "mode": "simulated",
+        "uri": "repo://fixtures/evidence/inspection-note.txt",
+        "captured_at": "2026-09-29T18:00:00Z",
+        "text": "Fictional inspection: panel DEMO-A has a reported hotspot. No radiometric file or calibrated measurement is supplied. Technical diagnosis requires review."
+      }
+    ],
+    "observations": [
+      {
+        "id": "OBS-001",
+        "text": "A hotspot was reported, but its temperature and cause are unverified.",
+        "evidence_ids": [
+          "EV-NOTE-001"
+        ],
+        "segment_ids": [],
+        "needs_review": true
+      }
+    ],
+    "missing_information": [
+      "Radiometric thermal image",
+      "Calibrated measurements and operating load",
+      "Qualified technical assessment"
+    ],
+    "created_at": "2026-09-29T18:00:00Z"
+  }
+}

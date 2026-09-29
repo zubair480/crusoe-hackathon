@@ -1,0 +1,1 @@
+Fictional inspection: panel DEMO-A has a reported hotspot. No radiometric file or calibrated measurement is supplied. Technical diagnosis requires review.

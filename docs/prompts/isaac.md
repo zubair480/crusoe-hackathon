@@ -17,7 +17,7 @@ git switch --track origin/codex/isaac-plaud-intake
 
 If you already have this clone and branch, use `git switch codex/isaac-plaud-intake` instead. Preserve any existing local work.
 
-This prompt is being published first so you can begin immediately. The shared foundation is being added next. Read AGENTS.md, README.md, docs/integration.md, contracts/v1.schema.json, and fixtures when present. If those files are not present yet, start the Plaud access check and a package-local adapter; do not wait or invent a competing shared contract. Use `git fetch origin` and `git merge origin/main` at your next coherent checkpoint to receive the foundation. Do not overwrite root files or teammates' work.
+Read AGENTS.md, README.md, docs/product-scope.md, docs/integration.md, contracts/v1.schema.json, and fixtures. If you cloned the early prompt-only commit, use `git fetch origin` and `git merge origin/main` at a coherent checkpoint to receive the shared foundation. Preserve existing work and resolve conflicts instead of overwriting files.
 
 ## Your responsibility
 
@@ -26,6 +26,8 @@ Own Plaud integration and evidence intake for BOTH the initial inspection and th
 ## Build
 
 First prove Plaud access. Read the current official documentation at https://docs.plaud.ai/. Identify the supported interface actually available to our account and verify its authentication and any device requirements. Retrieve one authorized recording's transcript before building around an assumed API. If access is blocked, record the exact blocker immediately and implement the labeled fallback below. A fallback keeps development moving; it is not proof of a working Plaud integration for the prize.
+
+The event's linked sponsor guide is https://drive.google.com/file/d/1XOznnXQZXAZoUA7AN1qf1yNnTvS7RLXN/view. It describes device capture, device binding to a mobile application, and speaker-labeled transcription. Verify access before choosing this path. Do not start a separate mobile application merely to satisfy an assumed requirement; report the prerequisite and coordinate the smallest supported path. See docs/prize-audit.md.
 
 1. Export `createInspectionPackage` and `collectCompletionEvidence` in TypeScript using the shared contract.
 2. Accept image/file references, case/site/asset identifiers, original technician notes, available measurements, and available equipment history. Preserve source files and source identifiers.
@@ -56,6 +58,12 @@ The target sponsor award is Best Use of Plaud, listed as $1,000 cash on the even
 Use fictional data or explicitly authorized demo material. List environment variable names only in `.env.example`. Do not contact third parties.
 
 ## Finish
+
+Deliver a usable increment in this order: Plaud access proof (or exact blocker and labeled fallback), initial evidence intake, then completion intake with identity/missing-evidence checks.
+
+Read docs/product-scope.md and docs/team-coordination.md. Start by running `python scripts/team_status.py` from the repository root. At milestones, immediately on a blocker, before pausing, and roughly every 10 minutes during active work, update and push ONLY your own handoff following that guide. Record the latest pushed implementation commit, exact exported signatures, tests, integration modes, and named requests. Read teammates' status before changing an integration. This is active-agent reporting, not an unattended background timer.
+
+Verify `git branch --show-current` is `codex/isaac-plaud-intake` before editing. Use your own clone. Publish your function signatures and example input/output after the first runnable increment; do not wait until the whole module is done. Treat fixtures as demonstrations, not proof of completed integrations. Both primary sponsors must have actual use evidenced for the intended prize entries.
 
 Work in three increments: (1) real transcript retrieval or a precise access blocker plus a runnable fallback; (2) initial inspection intake; (3) completion intake and mismatch checks. Push a coherent increment as soon as it works so the other teammates can integrate before everything is complete.
 

@@ -1,0 +1,40 @@
+{
+  "kind": "CompletionEvidence",
+  "data": {
+    "schema_version": "1.0",
+    "case_id": "DEMO-CASE-001",
+    "site_id": "DEMO-SITE",
+    "asset_id": "DEMO-A",
+    "completion_id": "COMP-001",
+    "job_id": "JOB-001",
+    "version": 1,
+    "technician_id": "DEMO-TECH",
+    "reported_status": "complete",
+    "comments": "Technician reports completion on DEMO-B; expected equipment is DEMO-A.",
+    "evidence": [
+      {
+        "id": "EV-COMP-001",
+        "kind": "transcript",
+        "asset_id": "DEMO-B",
+        "source": "synthetic",
+        "mode": "simulated",
+        "uri": "repo://fixtures/evidence/completion-note.txt",
+        "captured_at": "2026-09-29T18:00:00Z",
+        "text": "The repair is complete on panel DEMO-B.",
+        "segments": [
+          {
+            "id": "SEG-001",
+            "text": "The repair is complete on panel DEMO-B.",
+            "start_seconds": 0,
+            "end_seconds": 3,
+            "speaker": "DEMO-TECH"
+          }
+        ]
+      }
+    ],
+    "unresolved_items": [
+      "Completion equipment DEMO-B does not match expected DEMO-A."
+    ],
+    "created_at": "2026-09-29T18:00:00Z"
+  }
+}

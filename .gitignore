@@ -1,0 +1,38 @@
+# Credentials and local runtime configuration
+.env
+.env.*
+!.env.example
+band_config.yaml
+agent_config.yaml
+*.pem
+*.key
+credentials*.json
+secrets/
+
+# Installed packages and generated application output
+node_modules/
+.next/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+__pycache__/
+.venv/
+
+# Local customer data and generated evidence
+data/private/
+uploads/
+artifacts/
+*.sqlite
+*.sqlite3
+*.db
+
+# Local-only business research; publish build materials explicitly
+/business-research-2026-09-29.md
+/extrascope-build-brief.md
+/investor-readiness-assessment.md
+/thermaldesk-investor-pitch.md
+/thermaldesk-investor-pitch-v2.md
+
+.DS_Store
+Thumbs.db

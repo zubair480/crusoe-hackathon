@@ -1,0 +1,45 @@
+{
+  "kind": "Recommendation",
+  "data": {
+    "schema_version": "1.0",
+    "case_id": "DEMO-CASE-001",
+    "site_id": "DEMO-SITE",
+    "asset_id": "DEMO-A",
+    "recommendation_id": "REC-001",
+    "inspection_id": "INSPECT-001",
+    "version": 1,
+    "status": "approved",
+    "findings": [
+      {
+        "id": "FIND-001",
+        "description": "Synthetic maintenance task to exercise coordination. This is not a diagnosis.",
+        "evidence_ids": [
+          "EV-NOTE-001"
+        ],
+        "severity": "unassessed",
+        "uncertainties": [
+          "Fixture only; no real repair specification"
+        ]
+      }
+    ],
+    "repair_scope": "DEMO ONLY: coordinate replacement of fictional part DEMO-PART-01 and collect completion evidence. Not derived from a valid electrical diagnosis.",
+    "parts": [
+      {
+        "part_id": "DEMO-PART-01",
+        "approved_specification": "Fictional training prop. Not a purchasable electrical component.",
+        "quantity": 1,
+        "unit": "each",
+        "requires_specification_review": false
+      }
+    ],
+    "missing_information": [],
+    "approval": {
+      "reviewer_id": "DEMO-REVIEWER",
+      "recommendation_version": 1,
+      "approved_at": "2026-09-29T18:00:00Z",
+      "mode": "simulated"
+    },
+    "analysis_mode": "simulated",
+    "created_at": "2026-09-29T18:00:00Z"
+  }
+}
