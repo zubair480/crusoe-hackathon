@@ -16,6 +16,7 @@
     "start": "npm run start --workspace @thermaldesk/web",
     "typecheck": "tsc --noEmit",
     "test": "npm run test --workspace @thermaldesk/coordination && npm run test --workspace @thermaldesk/intake && vitest run && npm run test --workspace @thermaldesk/analysis",
+    "test:system": "node scripts/system-test.mjs",
     "contracts:generate": "node contracts/generate.mjs"
   },
   "devDependencies": {

@@ -59,7 +59,7 @@ export class CaseService {
         case 'coordinate': {
           const rec = state.recommendation;
           if (!rec || rec.status !== 'approved' || rec.approval?.recommendation_version !== rec.version) throw new Error('Approve the current recommendation before coordination.');
-          if (state.job && !['scheduled', 'blocked'].includes(state.job.status)) throw new Error('This job is already past scheduling.');
+          if (state.job && !['scheduled', 'blocked', 'coordinating'].includes(state.job.status)) throw new Error('This job is already past scheduling.');
           state.job = await this.ports.coordinateRepair(rec, state.job);
           note('Parts and technician coordinated', 'Simulated supplier and technician responses recorded. No purchase, call, or booking occurred outside this demo.');
           await writeSchedule();
@@ -94,7 +94,7 @@ export class CaseService {
           break;
         case 'complete': case 'wrong_asset': case 'incomplete': {
           const job = requireJob();
-          if (!['scheduled', 'awaiting_verification'].includes(job.status)) throw new Error('A scheduled job is required for this completion scenario.');
+          if (!['scheduled', 'in_progress', 'awaiting_verification'].includes(job.status)) throw new Error('A booked or active job is required for this completion scenario.');
           state.completion = await this.ports.collectCompletionEvidence(job, input.command, (state.completion?.version ?? 0) + 1);
           state.verification = null;
           state.job = await this.ports.submitCompletion(job, state.completion);

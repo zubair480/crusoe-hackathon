@@ -46,6 +46,8 @@ export interface FileJobRepositoryOptions {
 
 const LOCK_RETRY_MS = 15;
 const LOCK_TIMEOUT_MS = 5_000;
+const RENAME_RETRY_MS = 25;
+const RENAME_RETRY_LIMIT = 80;
 
 /**
  * File-backed store for the demo and for local development. Each job is one JSON file that
@@ -74,7 +76,23 @@ export function createFileJobRepository(options: FileJobRepositoryOptions): JobR
     const target = fileFor(record.job.job_id);
     const temporary = `${target}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
     await writeFile(temporary, `${JSON.stringify(record, null, 2)}\n`, 'utf8');
-    await rename(temporary, target);
+    try {
+      for (let attempt = 0; ; attempt += 1) {
+        try {
+          await rename(temporary, target);
+          break;
+        } catch (error) {
+          const code = (error as NodeJS.ErrnoException).code;
+          if (!['EPERM', 'EACCES', 'EBUSY'].includes(code ?? '') || attempt >= RENAME_RETRY_LIMIT) throw error;
+          // Windows sync/indexing processes can hold the destination for a few milliseconds.
+          // Keep the original file intact and retry the atomic replacement.
+          await new Promise((resolve) => setTimeout(resolve, RENAME_RETRY_MS));
+        }
+      }
+    } catch (error) {
+      await unlink(temporary).catch(() => undefined);
+      throw error;
+    }
   }
 
   async function withLock<T>(job_id: string, work: () => Promise<T>): Promise<T> {

@@ -31,19 +31,19 @@ export function createCoordinationPorts(directory: string, base: TeamPorts): Tea
 
   const buildAdapters = (recommendation: Pick<CoordinatorRecommendation, 'site_id' | 'parts'>): CoordinationAdapters => {
     const now = Date.now();
-    const technician: Technician = {
-      technician_id: 'TECH-DEMO-1',
-      name: 'Jordan Demo Technician',
+    const technician = (id: string, name: string, distance_km: number): Technician => ({
+      technician_id: id,
+      name,
       qualifications: ['electrical', 'thermography'],
       site_ids: [recommendation.site_id],
-      distance_km: 8,
+      distance_km,
       availability: [{
         start_at: new Date(now + 2 * 24 * 60 * 60 * 1000).toISOString(),
         end_at: new Date(now + 12 * 24 * 60 * 60 * 1000).toISOString(),
       }],
-      contact: { channel: 'simulated', address: 'sim:TECH-DEMO-1' },
+      contact: { channel: 'simulated', address: `sim:${id}` },
       active: true,
-    };
+    });
     const catalog = Object.fromEntries(recommendation.parts.map(part => [part.part_id, {
       unit_price_minor: 12_500,
       currency: 'USD',
@@ -52,7 +52,10 @@ export function createCoordinationPorts(directory: string, base: TeamPorts): Tea
     }]));
     return {
       suppliers: [createSimulatedSupplier({ supplier_id: 'SUP-DEMO-1', name: 'Demo Electrical Supply', clock: systemClock, catalog })],
-      roster: createSimulatedRoster([technician]),
+      roster: createSimulatedRoster([
+        technician('TECH-DEMO-1', 'Jordan Demo Technician', 8),
+        technician('TECH-DEMO-2', 'Taylor Backup Technician', 15),
+      ]),
       communication: createSimulatedCommunication(),
       schedule: createSimulatedSchedule({ clock: systemClock }),
       manager: { manager_id: 'MGR-DEMO', name: 'Demo Facilities Manager', address: 'sim:manager' },
