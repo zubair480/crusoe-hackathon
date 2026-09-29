@@ -1,6 +1,24 @@
 # Isaac coordinator and Band API
 
-The web server uses Isaac's canonical file repository in its configured artifact directory. Excel writes now happen through `createScheduleAdapter`; their actual receipts are stored in Isaac's job actions before the simulated manager message is composed. The app reads that canonical job when refreshing. Cancelled and proposed appointments are not published as confirmed schedule cells. Supplier, technician and manager adapters remain simulated.
+The web server uses Isaac's canonical file repository in its configured artifact directory. Excel writes happen through `createScheduleAdapter`; their actual receipts are stored in Isaac's job actions before the simulated manager message is composed. The app reads that canonical job when refreshing. Cancelled and proposed appointments are not published as confirmed schedule cells. The execution demo's supplier, technician and manager adapters remain simulated. The application's Band crew now runs a separate preparation workflow with public supplier links, operator-entered quotes and unsent email drafts; it never calls those simulated purchasing/booking adapters.
+
+## Public supplier links and email drafts
+
+Open `/api/preparation/workbench`, also linked as **Parts & dispatch** in the 3D workflow. An approved current scope unlocks preparation; synthetic approval is visibly labeled and disclosed inside each email. The current unapproved scope is never automatically approved to make the page look populated.
+
+| Role | Actual preparation work |
+|---|---|
+| RepairCoordinator | Validates the current approved scope and coordinates the other four roles. |
+| PartsSourcer | Builds Grainger and DigiKey search links and a McMaster-Carr catalog link, plus downloadable RFQ `.eml` files. It does not scrape prices, verify stock or retrieve supplier quotes automatically. |
+| AuthorityCritic | Checks entered quotes for exact approved part/specification, quantity, review flags, expiry/delivery, currency and individual/combined planning budget. Displays rejection reasons and source provenance. Eligibility is for human review, not purchase authorization. |
+| TechDispatcher | Uses a customer-entered roster to prepare downloadable technician availability enquiries. No email sends or bookings occur. |
+| ScheduleReporter | Records preparation progress honestly; preparation does not change the execution workbook. Existing confirmed execution events still use the Excel adapter. |
+
+`GET /api/preparation` returns the current scope, research links, saved quotes with source/recorder/time, critic results, roster and activity. `POST /api/preparation` uses `{command, expectedRevision, values}` with commands `prepare`, `quote`, `budget`, `contact`. The same local-origin and stale-revision checks apply. Monetary values are integer cents in `total_minor`; currency is a three-letter code. Quote values: `part_id`, `offered_part_id`, `specification`, `supplier`, `quantity`, `total_minor`, `currency`, public HTTPS `source_url`, timezone-bearing ISO `valid_until` and `delivery_at`, `recorded_by`. Budget values: `total_minor`, `currency`, `recorded_by`. Contact values: `name`, `email`, comma-separated `qualifications`, `recorded_by`.
+
+`GET /api/preparation?draft=rfq&id=<part_id>` and `?draft=technician&id=<contact_id>` download UTF-8 email drafts with `X-Unsent: 1`. Nothing is sent automatically. All preparation data is local app metadata in `case.json`, bound to a fingerprint of the exact recommendation version, scope, parts and approval; changing that scope invalidates its preparation. Isaac remains the owner of canonical execution state. No shared v1 business contract is changed.
+
+**Prepare work** runs the deterministic preparation steps locally without Band or paid requests. **Run preparation in Band** explicitly connects/posts through the five registered agents using the same preparation functions. It persists role outputs and routes to the next agent. Unchanged dispatches are deduplicated; changing saved quotes, budget or contacts produces a new dispatch key. There is no language-model inference in this lane. Live room delivery has not been re-tested for this increment; offline tests exercise all five roles with the memory transport.
 
 Five provided Band credentials are stored locally in the ignored `packages/coordination/agent_config.yaml`. They are never returned by an endpoint. `BAND_AGENT_CONFIG` can override this path. `npm ci` then `npm run dev` starts the application; no Band sockets are started just by opening it. All five agent IDs and registered names were checked using read-only Band identity requests on 2026-09-29. No live room dispatch was run in this integration task.
 
@@ -20,7 +38,7 @@ All POST requests require the same local Origin header as `/api/case`, JSON cont
 | `dispatch_band` | `allowLiveBand: true` | Create/reuse the approved job, persist its Band runtime and room, post kickoff or current-state update |
 | `event` | `event`, optional `allowLiveBand: true` | Apply an execution event; optionally post the resulting update into Band |
 
-`dispatch_band` requires an approved current recommendation. It does not approve a scope or accept a technician offer. Use the existing `/api/case` review commands to record a qualified demo review first. Purchasing, communication and acceptance remain explicitly simulated in this build.
+`dispatch_band` requires an approved current recommendation. It does not approve a scope or accept a technician offer. Use the existing `/api/case` review commands for a labeled demo review. The app injects `createPreparationCrewHandler`; Band dispatch prepares research and drafts only. `band.business_actions` reports `research_and_drafts_only`. Isaac's original simulated execution crew remains in his package for its separate demo.
 
 For an accepted simulated offer, use the `technician_id` from the returned `detail.offers`:
 

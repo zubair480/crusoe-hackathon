@@ -42,7 +42,7 @@ function availableActions() {
   const actions = [];
   if (!state.job && !state.scenarioLoaded) actions.push(["load_demo_scope", "Load demo scope"]);
   if (!state.job && state.recommendation?.status === "draft" && !state.recommendation.missing_information?.length) actions.push(["approve_scope", "Approve scope"]);
-  if (state.recommendation?.status === "approved" && (!state.job || ["blocked", "coordinating"].includes(state.job.status))) actions.push(["coordinate", state.job ? "Re-coordinate" : "Coordinate repair"]);
+  if (state.recommendation?.status === "approved" && (!state.job || ["blocked", "coordinating"].includes(state.job.status))) actions.push(["coordinate", "Run simulated demo"]);
   if (state.job && ["scheduled", "in_progress", "awaiting_verification"].includes(state.job.status)) actions.push(["complete", "Record completion"]);
   if (state.completion && (!state.verification || state.verification.completion_version !== state.completion.version)) actions.push(["verify", "Verify evidence"]);
   if (state.verification?.result === "ready_for_review" && state.job?.status === "awaiting_verification") actions.push(["approve_closure", "Approve closure"]);
@@ -63,9 +63,11 @@ function render() {
       <span>${job ? `Status: ${label(job.status)} · parts: ${label(job.parts_status)}` : recommendation ? `Status: ${label(recommendation.status)}` : "Upload inspection evidence to create a draft report."}</span><br>
       <span class="${failed ? "wf-error" : "wf-ok"}">${escape(message)}</span></div>
     ${health?.integrations?.crusoe === "simulated" ? '<p>Demo analysis is enabled. Images are stored locally; Crusoe is not called.</p>' : health?.integrations?.crusoe === "live_requests_disabled" ? '<p class="wf-error">Live Crusoe requests are disabled by the spending control.</p>' : ""}
+    <p>Demo purchasing and outreach are simulated. Open <b>Parts & dispatch</b> for public supplier research, recorded quotes and downloadable email drafts.</p>
     ${job ? '<p>Inspection uploads are locked for this repair. Reset demo clears this case and its schedule; download the report first if needed.</p>' : ""}
     ${recommendation ? `<details><summary>Findings (${recommendation.findings.length}) · missing information (${recommendation.missing_information.length})</summary>${recommendation.findings.map(f => `<p><b>${label(f.severity)}</b>: ${escape(f.description)}<br>Evidence: ${escape(f.evidence_ids.join(", "))}</p>`).join("")}<p>${escape(recommendation.repair_scope)}</p><ul>${recommendation.missing_information.map(item => `<li>${escape(item)}</li>`).join("")}</ul></details>` : ""}
     <div class="wf-actions">
+      <a href="${escape(API)}/api/preparation/workbench" target="_blank" rel="noopener">Parts & dispatch</a>
       ${!job ? `<label class="wf-upload">Upload & analyze<input id="wf-file" type="file" accept="image/png,image/jpeg,application/pdf,text/plain" ${busy || !state ? "disabled" : ""}></label>` : ""}
       ${actions.map(([command,text]) => `<button data-command="${command}" ${busy ? "disabled" : ""}>${text}</button>`).join("")}
       ${job ? `<a href="${escape(API)}/api/schedule" target="_blank" rel="noopener">Excel</a>` : ""}

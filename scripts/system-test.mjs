@@ -71,6 +71,24 @@ try {
   });
   const [code] = await once(smoke, 'exit');
   if (code !== 0) throw new Error(`HTTP system test exited with code ${code}.`);
+  const beforePreparation = await (await fetch(`${base}/api/case`)).json();
+  const preparedResponse = await fetch(`${base}/api/preparation`, {
+    method: 'POST', headers: { Origin: base, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ command: 'prepare', expectedRevision: beforePreparation.revision }),
+  });
+  const prepared = await preparedResponse.json();
+  if (!preparedResponse.ok || prepared.quotes.length || prepared.selected_total_minor !== null || prepared.history.length < 5) {
+    throw new Error('Preparation must produce agent work without fabricated prices.');
+  }
+  const partId = beforePreparation.recommendation.parts[0].part_id;
+  const rfqResponse = await fetch(`${base}/api/preparation?draft=rfq&id=${encodeURIComponent(partId)}`);
+  const rfq = await rfqResponse.text();
+  if (!rfqResponse.ok || !rfq.includes('X-Unsent: 1') || !rfqResponse.headers.get('content-disposition')?.includes('attachment')) throw new Error('RFQ must download as an unsent email draft.');
+  const afterPreparation = await (await fetch(`${base}/api/case`)).json();
+  if (JSON.stringify(beforePreparation.job) !== JSON.stringify(afterPreparation.job)) throw new Error('Preparation must not purchase, book or alter the canonical repair job.');
+  const workbench = await fetch(`${base}/api/preparation/workbench`);
+  if (!workbench.ok || !(await workbench.text()).includes('Parts & dispatch')) throw new Error('Parts and dispatch workbench is unavailable.');
+  console.log('Preparation HTTP checks: PASS (five agent outputs, no invented quotes, unsent RFQ, unchanged execution state).');
 } finally {
   if (server.exitCode === null) {
     server.kill('SIGTERM');

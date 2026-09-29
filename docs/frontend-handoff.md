@@ -8,6 +8,8 @@ For a separate backend on port 3001, use `npm run dev --workspace @thermaldesk/w
 
 ## Endpoints
 
+**2026-09-29 preparation increment:** the existing integration bridge links **Parts & dispatch** to `/api/preparation/workbench` and labels the old coordinator action **Run simulated demo**. This supplemental backend-served page provides supplier research links, sourced operator-entered quotes, budget/critic checks, and unsent RFQ/technician `.eml` downloads. It requires current scope approval and preserves synthetic labels. No scene, layout or Three.js components changed. Claude can replace the supplemental UI using `GET/POST /api/preparation`; the full fields and Band behavior are in `docs/isaac-api-integration.md`. It never purchases, emails, books or updates the execution workbook. Do not label its quote eligibility as purchasing authority or its drafts as contacted technicians.
+
 | Method and route | Contract |
 |---|---|
 | GET `/api/health` | Health and honest integration status. |
