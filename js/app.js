@@ -458,7 +458,7 @@ async function analyzeUpload(file) {
   setTimeout(() => { if (dev.b === b) document.body.classList.remove("aim"); }, 650);
   setTimeout(() => { if (dev.b === b) scrollReport(); }, 3200);
   const out = await backend;
-  if (report && report.b === b) { report.res = out.r || null; report.err = out.e || null; report.pending = false; if (selected === b) renderPanel(); $("b-report").classList.remove("pending"); stage("REPORT READY · PRESS R"); setTimeout(() => stage(""), 2500); }
+  if (report && report.b === b) { report.res = out.r || null; report.err = out.e || null; report.pending = false; if (selected === b) { renderPanel(); requestAnimationFrame(() => panel.scrollTo({ top: panel.scrollHeight, behavior: "smooth" })); } $("b-report").classList.remove("pending"); stage("REPORT READY · PRESS R"); setTimeout(() => stage(""), 2500); }
   if (dev.b !== b) return;
   renderBackend(out.r, out.e);
 }
