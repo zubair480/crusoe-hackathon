@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { analyzeInspection, compareCompletion, CrusoeAdapter, FixtureAnalysisAdapter } from "../src/index.ts";
+import { analyzeInspection, compareCompletion, CrusoeAdapter, extractJson, FixtureAnalysisAdapter } from "../src/index.ts";
 import type { CompletionEvidence, InspectionPackage, Recommendation, RepairJob } from "../src/types.ts";
 
 async function fixture<T>(name: string): Promise<T> {
@@ -61,4 +61,10 @@ test("wrong-asset completion cannot resolve DEMO-A", async () => {
   assert.equal(result.data.result, "mismatch");
   assert.match(result.data.missing_information.join(" "), /DEMO-B/);
   assert.equal(result.data.checks.find((item) => item.name === "identity_match")?.result, "fail");
+});
+
+test("reasoning wrappers and fenced model JSON are accepted", () => {
+  const parsed = extractJson('<think>private reasoning</think>\nHere is the draft:\n```json\n{"findings":[],"repair_scope":"Review evidence.","missing_information":[]}\n```') as Record<string, unknown>;
+  assert.deepEqual(parsed.findings, []);
+  assert.equal(parsed.repair_scope, "Review evidence.");
 });
