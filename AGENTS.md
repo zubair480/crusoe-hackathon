@@ -19,6 +19,8 @@ Run `python scripts/team_status.py` at startup to read everyone's latest pushed 
 
 ## Branches and ownership
 
+User update: Claude is building the 3D/Three.js frontend. Within Zubair's application assignment, Claude owns visual UI/scene/components and may replace the scaffold page/layout/CSS. Zubair's coding agent owns `apps/web/app/api/`, `apps/web/lib/`, Excel, reports and backend integration. Coordinate shared root dependencies and use `docs/frontend-handoff.md` rather than independently redesigning each other's interfaces. Find available frontend work through GitHub branches and commits; don't guess its implementation before it is pushed.
+
 | Owner | Branch | Owned paths |
 |---|---|---|
 | Zubair | `codex/zubair-app-integration` | `apps/web/`, `packages/excel/`, root workspace configuration, `contracts/`, `docs/integration.md`, `docs/handoffs/zubair.md` |

@@ -2,7 +2,9 @@
 
 **ThermalDesk turns thermal inspections into completed, verified repairs.**
 
-This repository currently contains the build plan, individual coding prompts, shared data contract, and synthetic fixtures. The application and integrations are not implemented yet.
+The `codex/zubair-app-integration` branch now includes a local backend, actual Excel updates and report export. Sponsor and dispatch integrations use explicitly simulated adapters until their owners connect them. Claude owns the 3D frontend; the current page is scaffold.
+
+Backend setup: `npm ci`, then `npm run dev`. Open the server address printed in the terminal. Run `npm test` and `npm run typecheck` to verify the implementation. See [the frontend API handoff](docs/frontend-handoff.md) for routes and the full demo sequence.
 
 ## Keep both pipelines
 
