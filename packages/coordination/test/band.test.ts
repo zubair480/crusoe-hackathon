@@ -49,7 +49,7 @@ const technician = (id: string, name: string): Technician => ({
   active: true,
 });
 
-async function crew(options: { policy?: CriticPolicy; parts?: boolean; lead_time_hours?: number } = {}) {
+async function crew(options: { policy?: CriticPolicy; parts?: boolean; lead_time_hours?: number; seats?: number } = {}) {
   const clock = createTestClock('2026-09-29T20:00:00.000Z');
   const supplier = createSimulatedSupplier({
     supplier_id: 'SUP-A',
@@ -88,7 +88,7 @@ async function crew(options: { policy?: CriticPolicy; parts?: boolean; lead_time
     },
     context,
   );
-  const room = createMemoryRoom();
+  const room = createMemoryRoom('ROOM-SIMULATED', { max_participants: options.seats });
   for (const role of BAND_ROLES) {
     room.registerPeer(role, createCrewHandler(role, { context, adapters, policy: options.policy }));
   }
@@ -228,4 +228,24 @@ test('a verdict that does not match the recorded request is blocked', async () =
   );
   assert.equal(env.supplier.order_requests.length, 0);
   assert.equal((await getJobDetail('JOB-001', env.context)).verdict_requests[0]?.status, 'blocked');
+});
+
+test('in a room with five seats the finished parts specialist makes room for the reporter', async () => {
+  const env = await crew({ seats: 5 });
+  await env.room.post('Morgan Manager', '@RepairCoordinator coordinate JOB-001', ['RepairCoordinator']);
+  assert.equal(env.room.participants().length, 5);
+  await advanceRepairJob(
+    'JOB-001',
+    { event_id: 'E-ACCEPT-1', type: 'technician_responded', technician_id: 'TECH-1', response: 'accepted', response_reference: 'SIM-IN-0001', mode: 'simulated' },
+    env.context,
+  );
+  await env.room.post('Morgan Manager', '@RepairCoordinator update JOB-001', ['RepairCoordinator']);
+
+  assert.deepEqual(env.room.participants().sort(), ['AuthorityCritic', 'Morgan Manager', 'RepairCoordinator', 'ScheduleReporter', 'TechDispatcher']);
+  assert.ok(env.room.log.some((entry) => entry.kind === 'left' && entry.mentions.includes('PartsSourcer')));
+  assert.equal(env.supplier.order_requests.length, 1, 'the order placed before the specialist left still stands');
+  const report = messagesTo(env, 'Morgan Manager').at(-1)!;
+  assert.equal(report.sender, 'ScheduleReporter');
+  assert.match(report.content, /Recommendation: no action is needed/);
+  assert.equal((await getRepairJob('JOB-001', env.context)).status, 'scheduled');
 });

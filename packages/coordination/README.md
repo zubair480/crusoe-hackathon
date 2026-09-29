@@ -7,9 +7,9 @@ Every supplier, messaging and schedule adapter shipped here is **simulated**. No
 technician, manager or workbook is contacted.
 
 A job runs on one of two runtimes, recorded with the job: `job_queue` (baseline) or `band`.
-The Band runtime is implemented. Its full flow is tested against a simulated room. On Band
-itself the five agents have been registered and connected; a full room flow on Band is not
-yet verified.
+The Band runtime is implemented and has run on Band: on 2026-09-29 the five registered agents
+took the fictional job `JOB-001` from kickoff to a confirmed booking and a report in a Band
+room. Suppliers, messaging and the schedule stayed simulated in that run.
 
 ## Setup
 
@@ -18,11 +18,12 @@ Requires Node.js 20 or newer.
 ```bash
 cd packages/coordination
 npm install --no-package-lock   # Zubair owns the shared lockfile
-npm test                        # type-check, build, 25 tests
+npm test                        # type-check, build, 26 tests
 npm run demo                    # baseline: a happy-path and an exception trace
 npm run band:demo               # the crew in a SIMULATED room
 npm run band:check              # is agent_config.yaml complete?
 npm run band                    # connect the crew to Band (needs credentials)
+npm run band:accept -- JOB-001  # record a SIMULATED technician acceptance
 ```
 
 ## Public API
@@ -196,8 +197,16 @@ Requires Node.js 22.12 or newer.
 3. `npm run band:check`, then `npm run band`. It seeds the fictional job `JOB-001`.
 4. In Band, open a room, add `RepairCoordinator`, and write
    `@RepairCoordinator coordinate JOB-001`.
-5. After a technician reply is recorded with `advanceRepairJob`, write
-   `@RepairCoordinator update JOB-001`.
+5. Record the technician's reply: `npm run band:accept -- JOB-001` (simulated), or
+   `advanceRepairJob` from a real channel. Then write `@RepairCoordinator update JOB-001`.
+
+Notes from the live run:
+
+- Band's free plan allows 5 participants in a room. The crew is you plus five agents, so
+  `PartsSourcer` leaves once the parts are ordered and `ScheduleReporter` takes its seat.
+- Agents rejoin the rooms they belong to after a restart (`autoSubscribeExistingRooms`).
+- `BAND_DEBUG=1 npm run band` prints what the SDK does.
+- To run the demo again, stop the crew, delete `.data/band/JOB-001.json` and use a new room.
 
 `createCrewHandler(role, deps)` returns the handler of one agent, and
 `startBandCrew(options)` connects all five. The critic's extra rules are set with
@@ -208,6 +217,7 @@ Requires Node.js 22.12 or newer.
 - No live or sandbox adapter. Calls, SMS and email are not implemented; the only
   communication adapter is simulated.
 - No real supplier integration.
-- On Band itself only the connection of the five agents is verified, not a full room flow.
+- On Band, one flow was run: kickoff to booking and report. The blocked-purchase path and the
+  no-parts path were run only in the simulated room.
 - The application does not yet post job events into the room by itself; a person writes
   `update <job id>`.

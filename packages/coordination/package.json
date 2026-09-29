@@ -25,7 +25,8 @@
     "demo": "tsc -p tsconfig.json && node dist/src/demo.js",
     "band": "tsc -p tsconfig.json && node dist/src/band/run.js",
     "band:check": "tsc -p tsconfig.json && node dist/src/band/run.js --check",
-    "band:demo": "tsc -p tsconfig.json && node dist/src/band/demo.js"
+    "band:demo": "tsc -p tsconfig.json && node dist/src/band/demo.js",
+    "band:accept": "tsc -p tsconfig.json && node dist/src/band/accept.js"
   },
   "devDependencies": {
     "@band-ai/sdk": "0.4.7",

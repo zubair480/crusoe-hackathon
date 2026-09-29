@@ -50,26 +50,51 @@ export function createCrewHandler(role: BandRole, deps: CrewDeps): CrewHandler {
   const think = (tools: RoomTools, text: string, metadata: Record<string, unknown> = {}) =>
     tools.sendEvent(text, 'thought', { agent: me, ...metadata });
 
-  async function recruit(tools: RoomTools, roles: BandRole[]): Promise<{ added: string[]; missing: string[] }> {
+  const reasonOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
+  /**
+   * Adds the agents a case needs. A room has a limited number of seats, so when an agent
+   * cannot be added, one whose work is finished (`release`) leaves first.
+   */
+  async function recruit(
+    tools: RoomTools,
+    roles: BandRole[],
+    release: BandRole[] = [],
+  ): Promise<{ added: string[]; missing: string[]; released: string[] }> {
     const present = (await tools.getParticipants()).map((item) => item.name);
     const peers = tools.lookupPeers ? (await tools.lookupPeers(1, 100)).data.map((item) => item.name) : null;
     const added: string[] = [];
     const missing: string[] = [];
+    const released: string[] = [];
     for (const wanted of roles) {
       const name = nameOf(wanted);
       if (present.includes(name)) continue;
       if (peers && !peers.includes(name)) {
-        missing.push(name);
+        missing.push(`${name} is not registered or not reachable in Band.`);
         continue;
       }
       try {
         await tools.addParticipant(name, 'member');
         added.push(name);
-      } catch {
-        missing.push(name);
+        continue;
+      } catch (error) {
+        const leaving = release.map(nameOf).find((item) => present.includes(item) && !released.includes(item) && item !== me);
+        if (!leaving) {
+          missing.push(`${name} could not join: ${reasonOf(error)}`);
+          continue;
+        }
+        try {
+          await tools.removeParticipant(leaving);
+          released.push(leaving);
+          await think(tools, `${name} could not join (${reasonOf(error)}). ${leaving} has finished its work and leaves the room to free a seat.`, { released: leaving, joining: name });
+          await tools.addParticipant(name, 'member');
+          added.push(name);
+        } catch (second) {
+          missing.push(`${name} could not join: ${reasonOf(second)}`);
+        }
       }
     }
-    return { added, missing };
+    return { added, missing, released };
   }
 
   const problems = (detail: JobDetail): string[] =>
@@ -133,9 +158,9 @@ export function createCrewHandler(role: BandRole, deps: CrewDeps): CrewHandler {
     if (envelope?.kind === 'job_event' || command?.command === 'update') {
       const { job } = detail;
       if (['scheduled', 'closed', 'cancelled'].includes(job.status)) {
-        const { missing } = await recruit(tools, ['ScheduleReporter']);
+        const { missing } = await recruit(tools, ['ScheduleReporter'], ['PartsSourcer']);
         if (missing.length > 0) {
-          await tools.sendMessage(`I cannot publish job ${job_id}: ${missing.join(', ')} is not reachable in Band.`, [requested_by]);
+          await tools.sendMessage(`I cannot publish job ${job_id}. ${missing.join(' ')}`, [requested_by]);
           return;
         }
         await think(tools, `Job ${job_id} is ${job.status}. The schedule and the report are the reporter's work.`);
@@ -172,7 +197,7 @@ export function createCrewHandler(role: BandRole, deps: CrewDeps): CrewHandler {
       { recruited: added, missing },
     );
     if (missing.length > 0) {
-      await tools.sendMessage(`I cannot coordinate job ${job_id}: ${missing.join(', ')} is not reachable in Band.`, [requested_by]);
+      await tools.sendMessage(`I cannot coordinate job ${job_id}. ${missing.join(' ')}`, [requested_by]);
       return;
     }
     if (partsToSource) {
@@ -379,14 +404,16 @@ export function createCrewHandler(role: BandRole, deps: CrewDeps): CrewHandler {
       const key = `booked:${detail.generation}:${booking.technician_id}`;
       if (announced.has(key)) return;
       announced.add(key);
-      const { missing } = await recruit(tools, ['ScheduleReporter']);
+      // The parts are ordered, so the parts specialist may leave to make room for the reporter.
+      const { missing } = await recruit(tools, ['ScheduleReporter'], ['PartsSourcer']);
       if (missing.length > 0) {
+        announced.delete(key);
         await say(tools, [nameOf('RepairCoordinator')], `The booking for job ${job_id} is confirmed but cannot be published.`, {
           kind: 'notice',
           job_id,
           requested_by,
-          headline: 'The booking is confirmed but the reporter is not reachable',
-          details: missing.map((item) => `${item} is not reachable in Band.`),
+          headline: 'The booking is confirmed but the reporter could not join the room',
+          details: missing,
         });
         return;
       }

@@ -44,6 +44,7 @@ export interface RoomTools {
   sendMessage(content: string, mentions?: string[]): Promise<unknown>;
   sendEvent(content: string, messageType: string, metadata?: Record<string, unknown>): Promise<unknown>;
   addParticipant(name: string, role?: string): Promise<unknown>;
+  removeParticipant(name: string): Promise<unknown>;
   getParticipants(): Promise<RoomParticipant[]>;
   lookupPeers?(page?: number, pageSize?: number): Promise<{ data: { id?: string; name?: string; type?: string }[] }>;
 }

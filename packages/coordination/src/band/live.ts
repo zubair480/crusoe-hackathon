@@ -19,6 +19,9 @@ export interface LiveCrew {
 
 export async function startBandCrew(options: LiveCrewOptions): Promise<LiveCrew> {
   const sdk = await import('@band-ai/sdk');
+  const core = await import('@band-ai/sdk/core');
+  // BAND_DEBUG=1 prints what the SDK does, which helps when an agent stays silent.
+  const logger = process.env.BAND_DEBUG ? new core.ConsoleLogger() : undefined;
   const roles = options.roles ?? BAND_ROLES;
   // Read every credential first, so a missing one stops the start before anything connects.
   const configs = roles.map((role) => ({ role, config: sdk.loadAgentConfig(ROLE_CONFIG_KEYS[role], options.config_path) }));
@@ -39,13 +42,20 @@ export async function startBandCrew(options: LiveCrewOptions): Promise<LiveCrew>
           sendMessage: (content, mentions) => tools.sendMessage(content, mentions),
           sendEvent: (content, messageType, metadata) => tools.sendEvent(content, messageType, metadata),
           addParticipant: (name, participantRole) => tools.addParticipant(name, participantRole),
+          removeParticipant: (name) => tools.removeParticipant(name),
           getParticipants: async () =>
             (await tools.getParticipants()).map((item) => ({ id: item.id, name: item.name, type: item.type })),
           lookupPeers: lookupPeers ? async (page, pageSize) => lookupPeers(page, pageSize) : undefined,
         },
       });
     });
-    const agent = sdk.Agent.create({ adapter, config });
+    const agent = sdk.Agent.create({
+      adapter,
+      config,
+      // A restarted agent must rejoin the rooms it already belongs to, or it stays silent.
+      agentConfig: { autoSubscribeExistingRooms: true },
+      ...(logger ? { logger } : {}),
+    });
     await agent.start();
     agents.push(agent);
   }

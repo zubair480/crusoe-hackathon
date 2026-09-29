@@ -8,7 +8,7 @@ import type { RoomParticipant, RoomTools } from './protocol.js';
 
 export interface RoomLogEntry {
   sequence: number;
-  kind: 'message' | 'event' | 'joined' | 'undelivered';
+  kind: 'message' | 'event' | 'joined' | 'left' | 'undelivered';
   sender: string;
   mentions: string[];
   content: string;
@@ -28,7 +28,7 @@ export interface MemoryRoom {
   post(sender: string, content: string, mentions: string[]): Promise<void>;
 }
 
-export function createMemoryRoom(room_id = 'ROOM-SIMULATED'): MemoryRoom {
+export function createMemoryRoom(room_id = 'ROOM-SIMULATED', options: { max_participants?: number } = {}): MemoryRoom {
   const peers = new Map<string, CrewHandler>();
   const members = new Set<string>();
   const log: RoomLogEntry[] = [];
@@ -68,10 +68,19 @@ export function createMemoryRoom(room_id = 'ROOM-SIMULATED'): MemoryRoom {
     async addParticipant(target) {
       if (!peers.has(target)) throw new Error(`Participant '${target}' not found.`);
       if (!members.has(target)) {
+        if (options.max_participants !== undefined && members.size >= options.max_participants) {
+          throw new Error('Participant limit reached for this chat room.');
+        }
         members.add(target);
         record({ kind: 'joined', sender: name, mentions: [target], content: `${name} added ${target}.`, message_type: 'text' });
       }
       return { status: 'added' };
+    },
+    async removeParticipant(target) {
+      if (members.delete(target)) {
+        record({ kind: 'left', sender: name, mentions: [target], content: `${name} removed ${target}.`, message_type: 'text' });
+      }
+      return { status: 'removed' };
     },
     async getParticipants() {
       return participantsOf();
