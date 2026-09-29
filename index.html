@@ -126,6 +126,19 @@
     .home { width:34%; height:4px; border-radius:3px; background:#111; margin:3px auto 6px; flex:none } .cam .home { position:absolute; left:33%; bottom:1.2%; background:#fff; margin:0 }
     body.device:not(.aim) .rep .cd { animation:slideUp .5s cubic-bezier(.2,.8,.2,1) both } .rep .cd:nth-child(3) { animation-delay:.1s } .rep .cd:nth-child(4) { animation-delay:.2s } .rep .cd:nth-child(5) { animation-delay:.3s }
     @keyframes slideUp { from { opacity:0; transform:translateY(10px) } }
+    .btn.start { background:linear-gradient(90deg,#ffc440,#ff9a1f); color:#111; border-left-color:#fff; animation:startGlow 2s ease-in-out infinite } .btn.start kbd { color:#5a3b00; border-color:#0003 }
+    @keyframes startGlow { 50% { box-shadow:0 0 18px #ffc44088 } }
+    .uppin { pointer-events:auto; transform:translate(50%,0); display:flex; flex-direction:column; gap:6px; padding:10px; width:210px; background:rgba(8,11,14,.86); backdrop-filter:blur(6px); border-left:2px solid var(--amber);
+      clip-path:polygon(0 0,calc(100% - 12px) 0,100% 12px,100% 100%,12px 100%,0 calc(100% - 12px)); font:500 11px var(--hud) }
+    .uppin::before { content:"CONTACTOR K1 · READY FOR IR"; font:700 9px var(--mono); letter-spacing:1.5px; color:var(--amber) }
+    .uppin.in { animation:pinIn .55s cubic-bezier(.2,.9,.25,1.2) both } @keyframes pinIn { from { opacity:0; transform:translate(50%,0) translateX(-30px) scale(.9) } }
+    .uppin button { cursor:pointer; border:0; font:700 12px var(--hud); letter-spacing:1.5px; text-transform:uppercase; padding:10px 12px; text-align:left; transition:transform .15s, background .2s }
+    .uppin button:active { transform:scale(.97) } .uppin .up-main { background:linear-gradient(90deg,#ffc440,#ff9a1f); color:#111; animation:startGlow 1.6s ease-in-out infinite } .uppin .up-main b { font-size:15px; margin-right:6px }
+    .uppin .up-alt { background:#1b2129; color:var(--fg); font-size:10.5px } .uppin .up-alt:hover { background:#27303b } .uppin small { color:var(--dim); font:500 10px var(--mono) }
+    body.dropping #host::after { content:"DROP IR IMAGE TO ANALYZE"; position:fixed; inset:12px; border:2px dashed var(--amber); display:grid; place-items:center; font:700 22px var(--hud); letter-spacing:4px; color:var(--amber); background:#0008; z-index:8; pointer-events:none }
+    .vf .scan { position:absolute; left:0; right:0; height:22%; top:-22%; background:linear-gradient(transparent, rgba(92,240,138,.35) 80%, rgba(160,255,190,.9)); display:none; mix-blend-mode:screen }
+    body.scanning .vf .scan { display:block; animation:scan 1.1s linear infinite } @keyframes scan { to { top:100% } }
+    #r-ai b { color:#111 } #r-ai .f { margin-top:4px; padding-top:4px; border-top:1px solid #f0f0f3 } .spin { display:inline-block; width:9px; height:9px; border:2px solid #0a6cff; border-right-color:transparent; border-radius:50%; animation:sp .7s linear infinite; vertical-align:-1px; margin-right:4px } @keyframes sp { to { transform:rotate(360deg) } }
     #tip { position:fixed; pointer-events:none; z-index:6; padding:6px 10px; font:500 11px var(--mono); display:none; background:rgba(8,11,14,.9); border-left:2px solid var(--amber) }
     #tip b { font:700 12px var(--hud); letter-spacing:1px }
   </style>
@@ -140,6 +153,7 @@
     <div class="frame stat"><div class="k">Sim clock</div><div class="v" id="c-t">0.0</div></div>
     <div class="sp"></div>
     <span class="simtag">SIMULATED</span>
+    <button class="btn start" id="b-start">Start inspection<kbd>S</kbd></button>
     <button class="btn" id="b-home">Overview<kbd>ESC</kbd></button>
     <button class="btn" id="b-thermal">Thermal<kbd>T</kbd></button>
   </div>
@@ -155,7 +169,7 @@
       <div class="scr cam">
         <div class="sb" style="color:#fff"><span class="clk">9:41</span><span class="ic"><span class="sig"><i></i><i></i><i></i><i></i></span>5G<span class="bat"><i></i></span></span></div>
         <div class="top"><span>IR 640×480</span><span>ε 0.95</span><span id="cam-sp">Sp –</span></div>
-        <div class="vf"><canvas id="ir" width="640" height="480"></canvas></div>
+        <div class="vf"><canvas id="ir" width="640" height="480"></canvas><div class="scan"></div></div>
         <div class="modes"><span>VISIBLE</span><b>THERMAL</b><span>MSX</span><span>VIDEO</span></div>
         <div class="thumb"><canvas id="ir-thumb" width="160" height="120"></canvas></div>
         <div class="shutter"><i></i></div>
@@ -164,12 +178,13 @@
       <div class="scr rep">
         <div class="sb"><span class="clk">9:41</span><span class="ic"><span class="sig"><i></i><i></i><i></i><i></i></span>5G<span class="bat"><i></i></span></span></div>
         <div class="nav"><a>‹ Route 4</a><b id="r-no">Inspection #014</b><span class="chip" id="r-chip">P1</span></div>
-        <div class="steps"><div class="done"><i></i>Captured</div><div class="done"><i></i>Analyzed</div><div class="cur"><i></i>Work order</div><div><i></i>Verified</div></div>
+        <div class="steps"><div class="done" id="s1"><i></i>Captured</div><div class="done" id="s2"><i></i>Analyzed</div><div class="cur" id="s3"><i></i>Work order</div><div id="s4"><i></i>Verified</div></div>
         <div class="rb" id="r-body">
           <div class="img"><canvas id="ir-shot" width="640" height="480"></canvas><div class="tag" id="r-file">IR_0014.jpg</div></div>
           <div class="cd"><h4 id="r-tag">–</h4><div class="m" id="r-loc">–</div><div class="m" id="r-np">–</div></div>
           <div class="cd"><div class="t">Measurements</div><table class="tbl" id="r-tbl"></table></div>
           <div class="cd"><span class="sev ok" id="r-sev">–</span><div class="fnd" id="r-fnd">–</div><div class="act" id="r-act">–</div></div>
+          <div class="cd" id="r-aicd"><div class="t">Backend analysis</div><div id="r-ai" class="m">–</div></div>
           <div class="cd"><div class="t">Camera &amp; conditions</div><table class="tbl" id="r-cond"></table></div>
         </div>
         <div class="rbtn"><span class="s">Retake</span><span class="p" id="r-wo">Create work order</span></div>

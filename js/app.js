@@ -201,10 +201,11 @@ const capCam = new THREE.PerspectiveCamera(30, 4 / 3, .01, 60);
 const devEl = document.getElementById("device"), $ = (id) => document.getElementById(id);
 // phone rises to the center, shows a live IR viewfinder, fires the shutter, then docks right as the report
 function openDevice(b) {
+  $("s1").innerHTML = "<i></i>Captured"; ["done", "done", "cur", ""].forEach((c, i) => $("s" + (i + 1)).className = c); $("r-ai").textContent = "Demo capture. Upload a real image to run backend analysis.";
   dev.b = b; dev.mode = "aim"; dev.aimT = 0; dev.last = -9; dev.shots++;
   document.body.classList.add("device", "aim"); $("r-body").scrollTop = 0;
 }
-function closeDevice() { dev.b = null; dev.mode = null; document.body.classList.remove("device", "aim"); }
+function closeDevice() { dev.b = null; dev.mode = null; document.body.classList.remove("device", "aim", "scanning"); }
 function shoot() {
   const b = dev.b; dev.mode = "shot";
   devEl.classList.remove("fire"); void devEl.offsetWidth; devEl.classList.add("fire");
@@ -280,6 +281,145 @@ function captureIR(t) {
   document.querySelectorAll("#device .clk").forEach((e) => e.textContent = new Date().toTimeString().slice(0, 5));
 }
 
+// ---------------------------------------------------------------- upload + analysis
+// The open bucket gets an Upload pin in the 3D scene. An uploaded IR image is analyzed on the device
+// (hotspot from the actual pixels) and sent to the ThermalDesk backend: /api/evidence, then "analyze".
+const API = new URLSearchParams(location.search).get("api") || (() => { try { return localStorage.getItem("thermaldesk-api"); } catch { return null; } })() || "http://127.0.0.1:3001";
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const fileIn = Object.assign(document.createElement("input"), { type: "file", accept: "image/png,image/jpeg", hidden: true });
+document.body.append(fileIn);
+fileIn.onchange = () => { const f = fileIn.files[0]; fileIn.value = ""; if (f) analyzeUpload(f); };
+const upEl = document.createElement("div"); upEl.className = "uppin";
+upEl.innerHTML = `<button class="up-main"><b>⇪</b>Upload IR image</button><button class="up-alt">Capture with phone (demo)</button><small>or drop a PNG / JPEG on the scene</small>`;
+upEl.addEventListener("pointerdown", (e) => e.stopPropagation());
+upEl.querySelector(".up-main").onclick = (e) => { e.stopPropagation(); fileIn.click(); };
+upEl.querySelector(".up-alt").onclick = (e) => { e.stopPropagation(); if (selected) { hideUpload(); openDevice(selected); } };
+const upPin = new CSS2DObject(upEl); upPin.visible = false;
+function showUpload(b) { b.group.add(upPin); upPin.position.set(BW / 2 + .02, .06, .04); upPin.visible = true; upEl.classList.remove("in"); void upEl.offsetWidth; upEl.classList.add("in"); }
+function hideUpload() { upPin.visible = false; }
+host.addEventListener("dragover", (e) => { if (selected) { e.preventDefault(); document.body.classList.add("dropping"); } });
+host.addEventListener("dragleave", () => document.body.classList.remove("dropping"));
+host.addEventListener("drop", (e) => { document.body.classList.remove("dropping"); if (!selected) return; e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) analyzeUpload(f); });
+
+// map image colors back onto the ironbow scale (or luminance for white-hot grayscale) and find the hot region
+const LUT = Array.from({ length: 64 }, (_, i) => { const c = ironbow(20 + 60 * i / 63); return [c.r * 255, c.g * 255, c.b * 255]; });
+function analyzePixels(img) {
+  const W = 256, H = Math.max(1, Math.round(256 * img.height / img.width));
+  const c = Object.assign(document.createElement("canvas"), { width: W, height: H }), g = c.getContext("2d");
+  g.drawImage(img, 0, 0, W, H); const d = g.getImageData(0, 0, W, H).data;
+  let sat = 0; for (let i = 0; i < d.length; i += 16) { const mx = Math.max(d[i], d[i + 1], d[i + 2]), mn = Math.min(d[i], d[i + 1], d[i + 2]); sat += mx ? (mx - mn) / mx : 0; }
+  const gray = sat / (d.length / 16) < .08;
+  const heat = new Float32Array(W * H), vals = [];
+  const x0 = Math.floor(W * .05), x1 = Math.floor(W * .88), y0 = Math.floor(H * .06), y1 = Math.floor(H * .94); // skip scale bar and edge text
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = (y * W + x) * 4, r = d[i], gg = d[i + 1], b = d[i + 2];
+    let v;
+    if (gray) v = (.299 * r + .587 * gg + .114 * b) / 255;
+    else { let best = 1e9, bi = 0; for (let k = 0; k < 64; k++) { const L = LUT[k], e = (L[0] - r) ** 2 + (L[1] - gg) ** 2 + (L[2] - b) ** 2; if (e < best) { best = e; bi = k; } } v = bi / 63; }
+    heat[y * W + x] = v; if (x >= x0 && x < x1 && y >= y0 && y < y1) vals.push(v);
+  }
+  const sorted = Float32Array.from(vals).sort(), q = (p) => sorted[Math.min(sorted.length - 1, Math.floor(p * sorted.length))];
+  const med = q(.5), p99 = q(.99), thr = Math.max(p99 - .04, med + (p99 - med) * .75);
+  let sx = 0, sy = 0, n = 0, bx0 = W, by0 = H, bx1 = 0, by1 = 0, peak = 0, px = 0, py = 0;
+  for (let y = Math.max(1, y0); y < Math.min(H - 1, y1); y++) for (let x = Math.max(1, x0); x < Math.min(W - 1, x1); x++) {
+    const v = heat[y * W + x];
+    if (v >= thr) { sx += x; sy += y; n++; bx0 = Math.min(bx0, x); by0 = Math.min(by0, y); bx1 = Math.max(bx1, x); by1 = Math.max(by1, y); }
+    const s = (heat[y * W + x] * 4 + heat[y * W + x - 1] + heat[y * W + x + 1] + heat[(y - 1) * W + x] + heat[(y + 1) * W + x]) / 8;
+    if (s > peak) { peak = s; px = x; py = y; }
+  }
+  const T = (v) => 20 + 60 * v;
+  return { gray, W, H, cx: (n ? sx / n : px) / W, cy: (n ? sy / n : py) / H, px: px / W, py: py / H, box: [bx0 / W, by0 / H, (bx1 + 1) / W, (by1 + 1) / H], areaPct: n / vals.length * 100,
+    peakT: T(peak), medT: T(med), dT: T(peak) - T(med), iw: img.width, ih: img.height };
+}
+function drawContain(g, img, W, H) {
+  const s = Math.min(W / img.width, H / img.height), w = img.width * s, h = img.height * s, ox = (W - w) / 2, oy = (H - h) / 2;
+  g.fillStyle = "#000"; g.fillRect(0, 0, W, H); g.drawImage(img, ox, oy, w, h); return { ox, oy, w, h };
+}
+function drawDetection(g, px, m) {
+  const X = (u) => m.ox + u * m.w, Y = (v) => m.oy + v * m.h, mono = "'JetBrains Mono', Consolas, monospace";
+  const [a, b, c, d] = px.box; g.save(); g.shadowColor = "#000"; g.shadowBlur = 4;
+  g.strokeStyle = "#5cf08a"; g.lineWidth = 2.5; g.setLineDash([8, 5]); g.strokeRect(X(a) - 6, Y(b) - 6, X(c) - X(a) + 12, Y(d) - Y(b) + 12); g.setLineDash([]);
+  const x = X(px.px), y = Y(px.py); g.strokeStyle = "#fff"; g.lineWidth = 2.5;
+  g.beginPath(); g.arc(x, y, 14, 0, 7); g.moveTo(x - 30, y); g.lineTo(x - 8, y); g.moveTo(x + 8, y); g.lineTo(x + 30, y); g.moveTo(x, y - 30); g.lineTo(x, y - 8); g.moveTo(x, y + 8); g.lineTo(x, y + 30); g.stroke();
+  g.fillStyle = "#fff"; g.font = `bold 22px ${mono}`; g.fillText(`HOT ${px.peakT.toFixed(1)}°C est`, Math.min(m.ox + m.w - 250, x + 22), Math.max(28, y - 22));
+  g.font = `bold 16px ${mono}`; g.fillStyle = "#5cf08a"; g.fillText(`ΔT ${px.dT.toFixed(1)} · area ${px.areaPct.toFixed(1)}%`, 12, 470); g.restore();
+}
+async function backendAnalyze(file) {
+  const get = async () => { const r = await fetch(API + "/api/case", { cache: "no-store" }); if (!r.ok) throw new Error("case " + r.status); return r.json(); };
+  const post = async (body) => { const r = await fetch(API + "/api/case", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status); return j; };
+  let st = await get(), note = "";
+  if (st.job) {
+    if (st.job.status !== "closed") throw new Error(`Active repair job ${st.job.job_id} is ${st.job.status}. Reset the demo in the workflow panel, then upload again.`);
+    st = await post({ command: "reset_demo", expectedRevision: st.revision }); note = "Closed demo job was reset before analysis.";
+  }
+  const fd = new FormData(); fd.append("file", file); fd.append("expectedRevision", String(st.revision));
+  await fetch(API + "/api/evidence", { method: "POST", body: fd, mode: "no-cors" }); // the route sends no CORS headers; confirm via /api/case
+  st = await get();
+  const ev = [...st.inspection.evidence].reverse().find((e) => e.source === "upload" && (e.text || "").includes(file.name));
+  if (!ev) throw new Error("The backend did not record the upload.");
+  st = await post({ command: "analyze", expectedRevision: st.revision });
+  return { rec: st.recommendation, ev, note };
+}
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
+function renderBackend(res, err) {
+  const el = $("r-ai");
+  if (err) { el.innerHTML = `<span class="sev crit">BACKEND</span> ${esc(err.message)}<div class="f">Backend: ${esc(API)}. On-device result above still stands.</div>`; $("s2").className = "done"; return; }
+  const r = res.rec, sevMap = { high: "crit", medium: "crit", low: "ok", unassessed: "ok" };
+  el.innerHTML = `<b>${esc(r.recommendation_id)}</b> · ${esc(r.status.replace("_", " "))} · mode <b>${esc(r.analysis_mode)}</b>
+    ${res.note ? `<div class="f">${esc(res.note)}</div>` : ""}
+    <div class="f">Evidence ${esc(res.ev.id)} · ${esc(res.ev.kind)}</div>
+    ${(r.findings || []).map((f) => `<div class="f"><span class="sev ${sevMap[f.severity] || "ok"}">${esc(f.severity.toUpperCase())}</span> ${esc(f.description)}${f.uncertainties?.length ? `<br><i>${esc(f.uncertainties.join(" · "))}</i>` : ""}</div>`).join("")}
+    ${r.repair_scope ? `<div class="f"><b>Scope:</b> ${esc(r.repair_scope)}</div>` : ""}
+    ${r.missing_information?.length ? `<div class="f"><b>Needs:</b> ${esc(r.missing_information.join(" · "))}</div>` : ""}
+    ${r.analysis_mode !== "live" ? `<div class="f">Simulated analysis. Not a live Crusoe call.</div>` : ""}`;
+  $("s2").className = "done"; $("s3").className = "cur";
+}
+async function analyzeUpload(file) {
+  const b = selected; if (!b) return;
+  if (!/^image\/(png|jpeg)$/.test(file.type)) { stage("PNG OR JPEG ONLY"); return; }
+  hideUpload(); dev.b = b; dev.mode = "upload"; dev.shots++;
+  let img; try { img = await createImageBitmap(file); } catch { stage("COULD NOT READ THAT IMAGE"); closeDevice(); showUpload(b); return; }
+  const backend = backendAnalyze(file).then((r) => ({ r }), (e) => ({ e }));
+  document.body.classList.add("device", "aim", "scanning"); $("r-body").scrollTop = 0;
+  const g = dev.cv.getContext("2d"), m = drawContain(g, img, 640, 480);
+  $("cam-sp").textContent = "ANALYZING…"; stage("3 / 3 · ANALYZING UPLOADED IR IMAGE");
+  const px = analyzePixels(img);
+  await wait(1900); if (dev.b !== b) return;
+  document.body.classList.remove("scanning"); drawDetection(g, px, m);
+  $("cam-sp").textContent = `HOT ${px.peakT.toFixed(1)}°C est`;
+  await wait(900); if (dev.b !== b) return;
+  dev.mode = "shot"; devEl.classList.remove("fire"); void devEl.offsetWidth; devEl.classList.add("fire");
+  $("ir-shot").getContext("2d").drawImage(dev.cv, 0, 0); $("ir-thumb").getContext("2d").drawImage(dev.cv, 0, 0, 160, 120);
+  fillReport(b); fillUpload(b, px, file);
+  $("r-ai").innerHTML = `<span class="spin"></span>Uploading to ${esc(API)} and running analysis…`;
+  setTimeout(() => { if (dev.b === b) document.body.classList.remove("aim"); }, 650);
+  setTimeout(() => { if (dev.b === b) scrollReport(); }, 3200);
+  const out = await backend; if (dev.b !== b) return;
+  renderBackend(out.r, out.e);
+}
+function fillUpload(b, px, file) {
+  const hot = px.dT > 15, T = b.state.temps, col = (t) => t > 60 ? "#d42a1c" : t > 48 ? "#b86e00" : "#1a8a44";
+  $("s1").innerHTML = "<i></i>Uploaded"; $("s1").className = "done"; $("s2").className = "cur"; $("s3").className = ""; $("s4").className = "";
+  $("r-file").textContent = `${file.name} · ${(file.size / 1024).toFixed(0)} KB`;
+  $("r-chip").textContent = hot ? "P1" : "OK"; $("r-chip").style.background = hot ? "#e5352b" : "#34c759";
+  const rows = [
+    ["01", "Hotspot peak (est.)", px.peakT.toFixed(1) + " °C", col(px.peakT)],
+    ["02", "Background median (est.)", px.medT.toFixed(1) + " °C"],
+    ["03", "ΔT hotspot vs background", px.dT.toFixed(1) + " °C", hot ? "#d42a1c" : "#111"],
+    ["04", "Hot region area", px.areaPct.toFixed(1) + " % of frame"],
+    ["05", "Hotspot position", `${Math.round(px.px * px.iw)}, ${Math.round(px.py * px.ih)} px`],
+    ["06", "Palette detected", px.gray ? "grayscale (white-hot)" : "ironbow"],
+    ["07", "Live sensor L1 / L2 / L3 (sim)", `${T.L1.toFixed(1)} / ${T.L2.toFixed(1)} / ${T.L3.toFixed(1)}`],
+    ["08", "Load current (sim)", b.state.amps.map((x) => x.toFixed(1)).join(" / ") + " A"],
+  ];
+  $("r-tbl").innerHTML = rows.map(([n, k, v, c]) => `<tr><td>${n}</td><td>${k}</td><td style="color:${c || "#111"}">${v}</td></tr>`).join("");
+  $("r-cond").innerHTML = [["File", file.name], ["Image size", `${px.iw}×${px.ih}`], ["Temperature scale", "assumed 20–80 °C"], ["Radiometric data", "no (color image)"], ["Uploaded", new Date().toTimeString().slice(0, 8)], ["Backend", API.replace(/^https?:\/\//, "")]]
+    .map(([k, v], i) => `<tr><td>${String(9 + i).padStart(2, "0")}</td><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join("");
+  $("r-sev").textContent = hot ? "PRIORITY 1 · HOT SPOT" : "NO CLEAR ANOMALY"; $("r-sev").className = "sev " + (hot ? "crit" : "ok");
+  $("r-fnd").textContent = hot ? `Hot region about ${px.dT.toFixed(0)} °C above background at the marked point. Estimated from image colors, not radiometric data.` : `Hottest area only ${px.dT.toFixed(1)} °C above background (estimated from colors).`;
+  $("r-act").textContent = hot ? "Confirm with a radiometric scan under load; if confirmed, de-energize, LOTO and re-torque the connection." : "No action from this image. Keep on the quarterly route.";
+}
+
 // ---------------------------------------------------------------- camera flights
 const ease = (u) => u < .5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
 const stageEl = document.getElementById("stage");
@@ -310,10 +450,10 @@ function macroPose(b) {
 }
 // three-stage zoom: 1 approach the line-up, 2 bucket front while the door swings open, 3 K1 macro in thermal
 function select(b) {
-  if (selected && selected !== b) { selected.setOpen(false); closeDevice(); }
+  if (selected && selected !== b) { selected.setOpen(false); closeDevice(); } hideUpload();
   if (!b) {
     selected = null; macro = false; renderPanel(); enterPanel();
-    closeDevice();
+    closeDevice(); hideUpload();
     flyPath([{ pos: HOME.pos.clone(), target: HOME.target.clone(), dur: 2.4, lift: 1.4, label: "RETURNING TO OVERVIEW" }]);
     return;
   }
@@ -322,7 +462,7 @@ function select(b) {
   flyPath([
     { pos: c.clone().add(new THREE.Vector3(1.5, 1.1, 3.1)), target: c.clone().add(new THREE.Vector3(0, -.15, 0)), dur: 1.7, lift: .9, hold: .3, label: `1 / 3 · ${b.lineup} · SECTION ${b.section}` },
     { pos: v.pos, target: v.target, dur: 1.4, hold: .9, label: `2 / 3 · BUCKET ${b.row} · ${b.tag} ${b.name}`, onStart: () => b.setOpen(true) },
-    { pos: v.pos, target: v.target, dur: .01, label: "3 / 3 · THERMAL CAPTURE · K1 CONTACTOR", onArrive: () => openDevice(b) },
+    { pos: v.pos, target: v.target, dur: .01, label: "3 / 3 · UPLOAD IR IMAGE OF K1", onArrive: () => showUpload(b) },
   ]);
 }
 function macroView(b) {
@@ -359,8 +499,9 @@ renderer.domElement.addEventListener("pointermove", (e) => {
   } else tip.style.display = "none";
 });
 document.getElementById("b-home").onclick = () => select(null);
+document.getElementById("b-start").onclick = () => select(buckets.get(HOT));
 document.getElementById("b-thermal").onclick = () => setThermal(!thermal);
-addEventListener("keydown", (e) => { if (e.key === "t" || e.key === "T") setThermal(!thermal); if (e.key === "Escape") select(null); });
+addEventListener("keydown", (e) => { if (e.key === "t" || e.key === "T") setThermal(!thermal); if (e.key === "Escape") select(null); if ((e.key === "s" || e.key === "S") && !selected) select(buckets.get(HOT)); });
 
 // pulsing warning rings on the floor in front of the hot bucket
 const ringM = new THREE.MeshBasicMaterial({ color: 0xff5a1f, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
@@ -457,4 +598,4 @@ renderer.setAnimationLoop(() => {
   controls.update(); if (thermal) tcam.render(scene, camera, clock.elapsedTime); else renderer.render(scene, camera); css.render(scene, camera);
 });
 renderPanel();
-window.__mcc = { scene, camera, buckets, select, setThermal, sim };
+window.__mcc = { scene, camera, buckets, select, setThermal, sim, analyzeUpload, captureIR, dev };
