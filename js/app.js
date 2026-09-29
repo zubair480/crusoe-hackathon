@@ -305,8 +305,8 @@ upEl.querySelector(".up-plaud").onclick = async (e) => {
     const plaud = await plaudResponse.json();
     if (!plaudResponse.ok) throw new Error(plaud.error || `Plaud ${plaudResponse.status}`);
     const asset = st.inspection?.asset_id;
-    const recording = (plaud.recordings || []).find((item) => (item.asset_mentions || []).includes(asset));
-    if (!recording) throw new Error(`No Plaud recording mentions ${asset || "this asset"}.`);
+    const recording = pickRecording(plaud.recordings, asset);
+    if (!recording) throw new Error(`No Plaud recording from the last hour or mentioning ${asset || "this asset"}. Run the Plaud pull.`);
     const importResponse = await fetch(API + "/api/plaud", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ recording_id: recording.id, expectedRevision: st.revision }),
@@ -330,6 +330,14 @@ host.addEventListener("dragover", (e) => { if (selected) { e.preventDefault(); d
 host.addEventListener("dragleave", () => document.body.classList.remove("dropping"));
 host.addEventListener("drop", (e) => { document.body.classList.remove("dropping"); if (!selected) return; e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) analyzeUpload(f); });
 
+// Plaud: the newest recording if it was made in the last hour (the live walk-down note);
+// otherwise the newest one that names the asset. Older unrelated recordings are never attached.
+function pickRecording(recs = [], asset) {
+  const sorted = [...recs].sort((a, b) => String(b.start_at ?? "").localeCompare(String(a.start_at ?? "")));
+  const newest = sorted[0];
+  if (newest && Date.now() - Date.parse(newest.start_at) < 60 * 60 * 1000) return newest;
+  return sorted.find((r) => (r.asset_mentions || []).includes(asset)) || null;
+}
 // map image colors back onto the ironbow scale (or luminance for white-hot grayscale) and find the hot region
 const LUT = Array.from({ length: 64 }, (_, i) => { const c = ironbow(20 + 60 * i / 63); return [c.r * 255, c.g * 255, c.b * 255]; });
 function analyzePixels(img) {
@@ -402,7 +410,7 @@ async function backendAnalyze(file, ctx) {
   let voice = null;
   try {
     const pl = await (await fetch(API + "/api/plaud", { cache: "no-store" })).json();
-    const asset = st.inspection.asset_id, hit = (pl.recordings || []).find((r) => (r.asset_mentions || []).includes(asset));
+    const asset = st.inspection.asset_id, hit = pickRecording(pl.recordings, asset);
     if (hit) {
       const r = await fetch(API + "/api/plaud", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ recording_id: hit.id, expectedRevision: st.revision }) });
       if (r.ok) { st = await r.json(); voice = hit; }
@@ -419,7 +427,7 @@ function renderBackend(res, err) {
   el.innerHTML = `<b>${esc(r.recommendation_id)}</b> · ${esc(r.status.replace("_", " "))} · mode <b>${esc(r.analysis_mode)}</b>
     ${res.note ? `<div class="f">${esc(res.note)}</div>` : ""}
     <div class="f">Evidence ${esc(res.ev.id)} · ${esc(res.ev.kind)}</div>
-    ${res.voice ? `<div class="f"><span class="sev ok">PLAUD · LIVE</span> Voice note ${esc(new Date(res.voice.start_at).toLocaleString())}: “${esc(res.voice.text.replace(/^Speaker \d+:\s*/, "").slice(0, 160))}”</div>` : `<div class="f">No Plaud voice note mentions this asset.</div>`}
+    ${res.voice ? `<div class="f"><span class="sev ok">PLAUD · LIVE</span> Voice note ${esc(new Date(res.voice.start_at).toLocaleString())}: “${esc(res.voice.text.replace(/^Speaker \d+:\s*/, "").slice(0, 160))}”</div>` : `<div class="f">No Plaud recording from the last hour or naming this asset.</div>`}
     ${(r.findings || []).map((f) => `<div class="f"><span class="sev ${sevMap[f.severity] || "ok"}">${esc(f.severity.toUpperCase())}</span> ${esc(f.description)}${f.uncertainties?.length ? `<br><i>${esc(f.uncertainties.join(" · "))}</i>` : ""}</div>`).join("")}
     ${r.repair_scope ? `<div class="f"><b>Scope:</b> ${esc(r.repair_scope)}</div>` : ""}
     ${r.missing_information?.length ? `<div class="f"><b>Needs:</b> ${esc(r.missing_information.join(" · "))}</div>` : ""}
