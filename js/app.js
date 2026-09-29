@@ -196,55 +196,89 @@ function thermalMats(on) {
 // ---------------------------------------------------------------- handheld thermal camera
 // When a bucket is open, a handheld IR camera slides in on the right and shoots the K1 contactor
 // from a fixed macro pose, refreshing about once a second. The main view stays in visible light.
-const dev = { el: document.getElementById("device"), cv: document.getElementById("ir"), b: null, last: -9, shots: 0 };
+const dev = { b: null, mode: null, aimT: 0, last: -9, shots: 13, cv: document.getElementById("ir") };
 const capCam = new THREE.PerspectiveCamera(30, 4 / 3, .01, 60);
+const devEl = document.getElementById("device"), $ = (id) => document.getElementById(id);
+// phone rises to the center, shows a live IR viewfinder, fires the shutter, then docks right as the report
 function openDevice(b) {
-  dev.b = b; dev.last = -9; dev.shots++;
-  document.getElementById("ir-file").textContent = `IR_${String(1000 + dev.shots).slice(1)}.jpg`;
-  document.body.classList.add("device"); dev.el.classList.remove("shoot"); void dev.el.offsetWidth; dev.el.classList.add("shoot");
+  dev.b = b; dev.mode = "aim"; dev.aimT = 0; dev.last = -9; dev.shots++;
+  document.body.classList.add("device", "aim"); $("r-body").scrollTop = 0;
 }
-function closeDevice() { dev.b = null; document.body.classList.remove("device"); }
+function closeDevice() { dev.b = null; dev.mode = null; document.body.classList.remove("device", "aim"); }
+function shoot() {
+  const b = dev.b; dev.mode = "shot";
+  devEl.classList.remove("fire"); void devEl.offsetWidth; devEl.classList.add("fire");
+  $("ir-shot").getContext("2d").drawImage(dev.cv, 0, 0); $("ir-thumb").getContext("2d").drawImage(dev.cv, 0, 0, 160, 120);
+  fillReport(b);
+  setTimeout(() => { if (dev.b === b) document.body.classList.remove("aim"); }, 650);
+  setTimeout(() => { if (dev.b === b) scrollReport(); }, 2600);
+}
+function scrollReport() {
+  const el = $("r-body"), end = el.scrollHeight - el.clientHeight; let t0 = null;
+  const step = (ts) => { if (!dev.b) return; t0 ??= ts; const u = Math.min(1, (ts - t0) / 5000); el.scrollTop = end * (u < .5 ? 2 * u * u : 1 - (-2 * u + 2) ** 2 / 2); if (u < 1) requestAnimationFrame(step); };
+  requestAnimationFrame(step);
+}
+function fillReport(b) {
+  const s = b.state, T = s.temps, ph = ["L1", "L2", "L3"], mx = Math.max(...ph.map((p) => T[p])), mn = Math.min(...ph.map((p) => T[p]));
+  const hp = ph.reduce((a, p) => T[p] > T[a] ? p : a, "L1"), cp = ph.reduce((a, p) => T[p] < T[a] ? p : a, "L1"), d = mx - mn, hot = d > 15;
+  const no = String(dev.shots).padStart(3, "0"), now = new Date();
+  const col = (t) => t > 60 ? "#d42a1c" : t > 48 ? "#b86e00" : "#1a8a44";
+  $("r-no").textContent = `Inspection #${no}`; $("r-file").textContent = `IR_${String(dev.shots).padStart(4, "0")}.jpg · ${now.toTimeString().slice(0, 8)}`;
+  $("r-chip").textContent = hot ? "P1" : "OK"; $("r-chip").style.background = hot ? "#e5352b" : "#34c759";
+  $("r-tag").textContent = `${b.tag} · ${b.name}`;
+  $("r-loc").textContent = `${b.lineup} · Sec ${b.section} · Bkt ${b.row} · 480 V 3Φ 60 Hz`;
+  $("r-np").textContent = `MCCB 50 A · K1 3-pole contactor 32 A AC-3 · coil 120 VAC · OL ${(b.fla * .9).toFixed(0)}–${(b.fla * 1.2).toFixed(0)} A`;
+  const rows = [
+    ["01", "Sp1 · L1 line terminal", T.L1.toFixed(1) + " °C", col(T.L1)],
+    ["02", "Sp2 · L2 line terminal", T.L2.toFixed(1) + " °C", col(T.L2)],
+    ["03", "Sp3 · L3 line terminal", T.L3.toFixed(1) + " °C", col(T.L3)],
+    ["04", "Bx1 max / avg", `${mx.toFixed(1)} / ${((T.L1 + T.L2 + T.L3) / 3).toFixed(1)} °C`],
+    ["05", `ΔT ${hp}–${cp}`, d.toFixed(1) + " °C", hot ? "#d42a1c" : "#111"],
+    ["06", "Contactor body", T.body.toFixed(1) + " °C"],
+    ["07", "Overload relay", T.ol.toFixed(1) + " °C"],
+    ["08", "Breaker case", T.brk.toFixed(1) + " °C"],
+    ["09", "Load current L1/L2/L3", s.amps.map((x) => x.toFixed(1)).join(" / ") + " A"],
+    ["10", "Load vs FLA", Math.round(s.load * 100) + " %"],
+  ];
+  $("r-tbl").innerHTML = rows.map(([n, k, v, c]) => `<tr><td>${n}</td><td>${k}</td><td style="color:${c || "#111"}">${v}</td></tr>`).join("");
+  $("r-cond").innerHTML = [["Ambient", sim.amb.toFixed(1) + " °C"], ["Reflected temp", "27.0 °C"], ["Emissivity", "0.95"], ["Distance", "0.5 m"], ["Rel. humidity", "42 %"], ["Camera", "640×480 · NETD <30 mK"], ["Inspector", "Route 4 · Z. Zafar"]]
+    .map(([k, v], i) => `<tr><td>${String(11 + i)}</td><td>${k}</td><td>${v}</td></tr>`).join("");
+  $("r-sev").textContent = hot ? "PRIORITY 1 · REPAIR IMMEDIATELY" : "NO ANOMALY"; $("r-sev").className = "sev " + (hot ? "crit" : "ok");
+  $("r-fnd").textContent = hot ? `${hp} line terminal ${T[hp].toFixed(1)} °C, ${d.toFixed(1)} °C above ${cp} under ${Math.round(s.load * 100)}% load. Likely loose or oxidized lug.` : `All three phases within ${d.toFixed(1)} °C.`;
+  $("r-act").textContent = hot ? "De-energize and LOTO, re-torque lug to spec, inspect ferrule and contact tips, re-scan under load." : "No action. Next scan on the quarterly route.";
+  $("r-wo").textContent = hot ? "Create work order" : "Mark inspected";
+}
 function captureIR(t) {
   const b = dev.b; if (!b || !b.terms || !b.state) return;
-  const c0 = b.group.getWorldPosition(new THREE.Vector3()), m = { pos: c0.clone().add(new THREE.Vector3(.02, .015, .5)), target: c0.clone().add(new THREE.Vector3(0, 0, -.3)) }; capCam.position.copy(m.pos); capCam.lookAt(m.target); capCam.updateMatrixWorld();
-  if (!thermal) thermalMats(true);
+  const c0 = b.group.getWorldPosition(new THREE.Vector3());
+  capCam.position.copy(c0).add(new THREE.Vector3(.02, .015, .5)); capCam.lookAt(c0.clone().add(new THREE.Vector3(0, 0, -.3))); capCam.updateMatrixWorld();
   const gv = b.glow.visible; b.glow.visible = false;
+  if (!thermal) thermalMats(true);
   tcam.resize(640, 480); tcam.render(scene, capCam, t);
-  b.glow.visible = gv;
   const g = dev.cv.getContext("2d"), W = dev.cv.width, H = dev.cv.height;
   g.drawImage(renderer.domElement, 0, 0, W, H);
   if (!thermal) thermalMats(false);
-  tcam.resize(host.clientWidth, host.clientHeight);
-  // overlays drawn onto the capture like camera firmware does
-  const T = b.state.temps, spot = b.terms.L2.getWorldPosition(new THREE.Vector3()).project(capCam);
-  const x = (spot.x + 1) / 2 * W, y = (1 - spot.y) / 2 * H;
-  const mono = "'JetBrains Mono', Consolas, monospace";
-  g.strokeStyle = "#fff"; g.lineWidth = 2.5; g.shadowColor = "#000"; g.shadowBlur = 3;
-  g.beginPath(); g.arc(x, y, 16, 0, 7); g.moveTo(x - 30, y); g.lineTo(x - 8, y); g.moveTo(x + 8, y); g.lineTo(x + 30, y); g.moveTo(x, y - 30); g.lineTo(x, y - 8); g.moveTo(x, y + 8); g.lineTo(x, y + 30); g.stroke();
-  g.fillStyle = "#fff"; g.font = `bold 26px ${mono}`; g.fillText(`Sp1 ${T.L2.toFixed(1)}°C`, Math.min(W - 250, x + 26), Math.max(34, y - 24));
-  g.font = `bold 20px ${mono}`;
-  const mx = Math.max(T.L1, T.L2, T.L3), d = mx - Math.min(T.L1, T.L2, T.L3);
-  g.fillText(`Max ${mx.toFixed(1)}`, 14, 30); g.fillText(`Min ${sim.amb.toFixed(1)}`, 14, 56); g.fillText("ε 0.95", 14, H - 16);
+  b.glow.visible = gv; tcam.resize(host.clientWidth, host.clientHeight);
+  const T = b.state.temps, mono = "'JetBrains Mono', Consolas, monospace";
+  g.shadowColor = "#000"; g.shadowBlur = 3; g.strokeStyle = "#fff"; g.fillStyle = "#fff";
+  ["L1", "L2", "L3"].forEach((p, i) => {
+    const q = b.terms[p].getWorldPosition(new THREE.Vector3()).project(capCam), x = (q.x + 1) / 2 * W, y = (1 - q.y) / 2 * H, big = p === "L2";
+    const r = big ? 11 : 7; g.lineWidth = big ? 2.5 : 1.8;
+    g.beginPath(); g.moveTo(x - r * 2, y); g.lineTo(x - r * .5, y); g.moveTo(x + r * .5, y); g.lineTo(x + r * 2, y); g.moveTo(x, y - r * 2); g.lineTo(x, y - r * .5); g.moveTo(x, y + r * .5); g.lineTo(x, y + r * 2); g.stroke();
+    g.font = `bold ${big ? 22 : 16}px ${mono}`; g.fillText(`Sp${i + 1} ${T[p].toFixed(1)}`, x - 40 + (i - 1) * 55, y - 34 - (big ? 18 : 0) - (i === 0 ? 20 : 0));
+  });
+  // measurement box around the contactor
+  const bx = b.contactor.getWorldPosition(new THREE.Vector3()).project(capCam), bxX = (bx.x + 1) / 2 * W, bxY = (1 - bx.y) / 2 * H;
+  g.lineWidth = 1.5; g.setLineDash([6, 4]); g.strokeRect(bxX - 70, bxY - 95, 140, 175); g.setLineDash([]);
+  const mx = Math.max(T.L1, T.L2, T.L3);
+  g.font = `bold 18px ${mono}`; g.fillText(`Bx1 Max ${mx.toFixed(1)}`, 14, 28); g.fillText(`ΔT ${(mx - Math.min(T.L1, T.L2, T.L3)).toFixed(1)}`, 14, 52); g.fillText("ε 0.95", 14, H - 14);
   const gr = g.createLinearGradient(0, H - 40, 0, 40);
   ["#08041c", "#2e066e", "#800a8c", "#c81e6e", "#ec501e", "#fca00a", "#ffe25a", "#fffff0"].forEach((c, i, a) => gr.addColorStop(i / (a.length - 1), c));
-  g.shadowBlur = 0; g.fillStyle = gr; g.fillRect(W - 30, 40, 16, H - 80); g.strokeStyle = "#fff8"; g.lineWidth = 1; g.strokeRect(W - 30, 40, 16, H - 80);
-  g.fillStyle = "#fff"; g.font = `bold 16px ${mono}`; g.textAlign = "right"; g.fillText("80", W - 36, 52); g.fillText("20", W - 36, H - 42); g.textAlign = "left";
-  const $ = (id) => document.getElementById(id), col = (t) => t > 60 ? "#d42a1c" : t > 48 ? "#c77a00" : "#1a8a44";
-  $("ir-tag").textContent = `${b.tag} · ${b.name}`;
-  $("ir-loc").textContent = `${b.lineup} · Section ${b.section} · Bucket ${b.row} · 480 V`;
-  $("ir-dev").textContent = `Breaker + K1 3-pole contactor + OL relay · ${b.fla} A FLA`;
-  $("ir-load").textContent = `${Math.round(b.state.load * 100)}% · ${b.state.amps.map((x) => x.toFixed(0)).join("/")} A`;
-  for (const p of ["L1", "L2", "L3"]) { $("ir-" + p).textContent = T[p].toFixed(1); $("ir-" + p).style.color = col(T[p]); }
-  $("ir-dt").textContent = d.toFixed(1); $("ir-dt").style.color = d > 15 ? "#d42a1c" : "#111";
-  const hot = d > 15, hp = ["L1", "L2", "L3"].reduce((a, p) => T[p] > T[a] ? p : a, "L1");
-  $("ir-verdict").textContent = hot ? "PRIORITY 1 · HOT JOINT" : "NO ANOMALY"; $("ir-verdict").className = "ph-sev " + (hot ? "crit" : "ok");
-  $("ir-finding").textContent = hot ? `${hp} line terminal ${T[hp].toFixed(1)} °C, ${d.toFixed(1)} °C above the coolest phase` : `Phases within ${d.toFixed(1)} °C of each other`;
-  $("ir-action").textContent = hot ? "De-energize, LOTO, re-torque the lug, inspect ferrule and contact tips, re-scan under load." : "No action. Next scan on the quarterly route.";
-  $("ir-wo").textContent = hot ? "Create work order" : "Mark inspected";
-  $("ir-clock").textContent = new Date().toTimeString().slice(0, 5);
+  g.shadowBlur = 0; g.fillStyle = gr; g.fillRect(W - 28, 40, 14, H - 80); g.strokeStyle = "#fff8"; g.lineWidth = 1; g.strokeRect(W - 28, 40, 14, H - 80);
+  g.fillStyle = "#fff"; g.font = `bold 15px ${mono}`; g.textAlign = "right"; g.fillText("80", W - 34, 52); g.fillText("20", W - 34, H - 42); g.textAlign = "left";
+  $("cam-sp").textContent = `Sp2 ${T.L2.toFixed(1)}°C`;
+  document.querySelectorAll("#device .clk").forEach((e) => e.textContent = new Date().toTimeString().slice(0, 5));
 }
-const scaleEl = document.getElementById("scale");
-scaleEl.innerHTML = '<div class="grad"></div>' + [80, 70, 60, 50, 40, 30, 20].map((t, i) => `<span style="top:calc(${i / 6 * 100}% - 7px)">${t}°C</span>`).join("");
 
 // ---------------------------------------------------------------- camera flights
 const ease = (u) => u < .5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
@@ -415,7 +449,11 @@ renderer.setAnimationLoop(() => {
       camera.position.lerp(dp, k); controls.target.lerp(dtg, k);
     }
   }
-  if (dev.b && clock.elapsedTime - dev.last > 1) { dev.last = clock.elapsedTime; captureIR(clock.elapsedTime); }
+  if (dev.b && dev.mode === "aim") {
+    dev.aimT += dt;
+    if (clock.elapsedTime - dev.last > .2) { dev.last = clock.elapsedTime; captureIR(clock.elapsedTime); }
+    if (dev.aimT > 2.2) shoot();
+  }
   controls.update(); if (thermal) tcam.render(scene, camera, clock.elapsedTime); else renderer.render(scene, camera); css.render(scene, camera);
 });
 renderPanel();
