@@ -1,10 +1,10 @@
 # Isaac handoff
 
-- **Updated (UTC):** 2026-09-29T20:42Z
+- **Updated (UTC):** 2026-09-29T21:03Z
 - **Owner / branch:** Isaac · `codex/isaac-repair-coordination`
 - **Owned paths:** `packages/coordination/`, `docs/handoffs/isaac.md`
-- **Status:** all three increments implemented and tested with SIMULATED adapters only.
-- **Latest pushed implementation commit:** `4721273`
+- **Status:** all three increments implemented and tested with SIMULATED adapters only. A Band runtime is implemented and tested in a SIMULATED room; it has NOT been run on Band.
+- **Latest pushed implementation commit:** `65e0fea`
 - **Uncommitted local work:** none
 
 ## What works
@@ -15,8 +15,9 @@ on the v1 contract. Setup, wiring and rules are in `packages/coordination/README
 ```bash
 cd packages/coordination
 npm install --no-package-lock
-npm test      # 19 tests, all passing
-npm run demo  # happy-path and exception traces
+npm test           # 25 tests, all passing
+npm run demo       # baseline happy-path and exception traces
+npm run band:demo  # the Band crew in a simulated room
 ```
 
 ## Exported signatures
@@ -66,7 +67,7 @@ as `data/private/coordination`. `createInMemoryJobRepository()` is for tests.
 
 ## Checks performed
 
-`npm test` in `packages/coordination`: 19 tests, 19 passing. Every `RepairJob` the tests
+`npm test` in `packages/coordination`: 25 tests, 25 passing. Every `RepairJob` the tests
 produce is validated against `contracts/v1.schema.json`.
 
 | Acceptance check | Result |
@@ -93,9 +94,30 @@ verified closure published to the schedule adapter and the timeline.
 | Calls, SMS, email | not implemented | No live or sandbox adapter exists. |
 | Schedule (Excel) | simulated stand-in | `createSimulatedSchedule`. No workbook was changed. |
 | Job store | local files | Real persistence on local disk. |
-| BAND | not used | The baseline in-process job queue runs. |
+| BAND | not configured | Runtime implemented with `@band-ai/sdk` 0.4.7. No Band account or agent credentials exist, so it has never connected to Band. Verified only in a simulated room. |
+| Baseline runtime | local | In-process job queue. Each job records which runtime it uses. |
 
 Nothing outside this machine changed. No live integration has been exercised.
+
+## Band runtime
+
+Five separately registered agents: `RepairCoordinator`, `PartsSourcer`, `AuthorityCritic`,
+`TechDispatcher`, `ScheduleReporter`. Patterns used: runtime recruit, critic overlay with a
+veto, and an assembly line whose appointment depends on the handed-over parts estimate.
+On the `band` runtime the engine refuses a parts order or a booking without a recorded
+verdict, and refuses to plan technicians without the parts handoff.
+
+New exports: `createCrewHandler`, `startBandCrew`, `createMemoryRoom`,
+`selectCoordinationRuntime`, and the workflow event `action_verdict_recorded`.
+`createRepairJob` accepts `runtime: 'band'`.
+
+Checks (in `test/band.test.ts`, simulated room): full flow to a confirmed booking and a report;
+critic blocks a purchase and nothing is ordered; a job without parts never recruits the parts
+specialist; the appointment follows the handed-over estimate; without the room a Band job
+buys nothing; a request that differs from the recorded one is blocked.
+
+**Blocker for live use (needs a person):** a Band account and five registered agents. Steps
+are in the package README under "Run it on Band".
 
 ## Dependencies and requests
 
@@ -131,6 +153,8 @@ Nothing outside this machine changed. No live integration has been exercised.
 
 ## Remaining issues
 
+- The Band runtime has never connected to Band. Live use needs five registered agents.
+- The app does not post job events into the Band room by itself; a person writes `update <job id>`.
 - No live or sandbox communication adapter. A real channel needs an account, credentials and
   an explicit list of consenting recipients.
 - No real supplier integration.
@@ -143,7 +167,7 @@ Nothing outside this machine changed. No live integration has been exercised.
 
 ## Blockers
 
-None.
+Band live run: no Band account or agent credentials. Nothing else is blocked.
 
 ## Traces from `npm run demo` (all integrations simulated)
 
@@ -225,4 +249,138 @@ None.
  34 v23 coordinating           action_requested [simulated]: Offer 2026-09-30T21:00:00.000Z to Dana Demo by simulated (attempt 1)
  35 v24 coordinating           action_recorded [simulated]: Offer 2026-09-30T21:00:00.000Z to Dana Demo by simulated: confirmed
  36 v25 coordinating           follow_up_scheduled: Follow-up technician_response for JOB-001-OFF-0003 due 2026-09-29T22:01:00.000Z (attempt 1)
+```
+
+## Trace from `npm run band:demo` (simulated room, simulated adapters)
+
+```text
+=== CREW FLOW (SIMULATED room, SIMULATED adapters) ===
+  1 Morgan Manager -> @RepairCoordinator
+      @RepairCoordinator coordinate JOB-001
+  2 RepairCoordinator -> @AuthorityCritic (joined)
+      RepairCoordinator added AuthorityCritic.
+  3 RepairCoordinator -> @PartsSourcer (joined)
+      RepairCoordinator added PartsSourcer.
+  4 RepairCoordinator -> @TechDispatcher (joined)
+      RepairCoordinator added TechDispatcher.
+  5 RepairCoordinator (thought)
+      Job JOB-001 on asset DEMO-A: 1 approved part(s), parts status not_ordered. Parts must be sourced first. Recruited: AuthorityCritic, PartsSourcer, TechDispatcher.
+  6 RepairCoordinator -> @PartsSourcer
+      Source the approved parts for job JOB-001.
+  7 PartsSourcer -> @AuthorityCritic
+      Verdict needed before I do this: Order 1 each of DEMO-PART-01 from Demo Supplier A for 125.00 USD.
+  8 AuthorityCritic (thought)
+      Verdict on JOB-001-VRD-0001: approved.
+      pass: the request is recorded for this job and still open
+      pass: the request in the room matches the recorded request
+      pass: the approval still covers the job
+      pass: the approval names the current version
+      pass: the simulated approval covers a simulated action
+      pass: an authority is configured
+      pass: the authority has not expired
+      pass: the authority allows parts_order
+      pass: the simulated authority covers a simulated action
+      pass: the part is in the approved scope
+      pass: the quantity is the approved quantity
+      pass: the specification is the approved specification
+      pass: the supplier is an allowed supplier
+      pass: the supplier is not blocked by policy
+      pass: the currency is the authority currency
+      pass: the order fits the remaining authority
+  9 AuthorityCritic -> @PartsSourcer
+      APPROVED JOB-001-VRD-0001. All 16 checks passed.
+ 10 PartsSourcer (thought)
+      Parts for job JOB-001 are ordered. Latest delivery estimate: 2026-09-30T20:00:00.000Z.
+ 11 PartsSourcer -> @TechDispatcher
+      Parts for job JOB-001 are ordered. The latest delivery estimate is 2026-09-30T20:00:00.000Z. Plan the appointment after it.
+ 12 TechDispatcher -> @RepairCoordinator
+      I offered 2026-09-30T21:00:00.000Z to Dana Demo for job JOB-001.
+ 13 RepairCoordinator -> @Morgan Manager
+      Appointment offered to Dana Demo (job JOB-001).
+      - Proposed: 2026-09-30T21:00:00.000Z to 2026-09-30T23:00:00.000Z.
+      - Planned after the parts estimate 2026-09-30T20:00:00.000Z handed over by the parts specialist.
+      - A reply is due by 2026-09-29T21:00:00.000Z.
+ 14 Morgan Manager -> @RepairCoordinator
+      @RepairCoordinator update JOB-001
+ 15 RepairCoordinator (thought)
+      Job JOB-001 is coordinating. Something changed, so the dispatcher looks at the appointment.
+ 16 RepairCoordinator -> @TechDispatcher
+      Job JOB-001 changed. Review the appointment.
+ 17 TechDispatcher -> @AuthorityCritic
+      Verdict needed before I do this: Confirm the booking with Dana Demo for 2026-09-30T21:00:00.000Z.
+ 18 AuthorityCritic (thought)
+      Verdict on JOB-001-VRD-0002: approved.
+      pass: the request is recorded for this job and still open
+      pass: the request in the room matches the recorded request
+      pass: the approval still covers the job
+      pass: the approval names the current version
+      pass: the simulated approval covers a simulated action
+      pass: an authority is configured
+      pass: the authority has not expired
+      pass: the authority allows booking
+      pass: the simulated authority covers a simulated action
+      pass: the technician was shortlisted from the approved roster
+      pass: the technician accepted this appointment
+      pass: the parts handoff was received
+      pass: the appointment starts after the handed-over parts estimate
+ 19 AuthorityCritic -> @TechDispatcher
+      APPROVED JOB-001-VRD-0002. All 13 checks passed.
+ 20 TechDispatcher -> @ScheduleReporter (joined)
+      TechDispatcher added ScheduleReporter.
+ 21 TechDispatcher -> @ScheduleReporter
+      Job JOB-001 is booked with Dana Demo for 2026-09-30T21:00:00.000Z. Update the schedule and report.
+ 22 ScheduleReporter -> @Morgan Manager
+      Job JOB-001 is scheduled and published. Recommendation: no action is needed.
+      - Status: scheduled. Parts: ordered.
+      - Technician: Dana Demo, 2026-09-30T21:00:00.000Z to 2026-09-30T23:00:00.000Z (confirmed).
+      - Schedule workbook: updated (simulated).
+      - Manager update: sent (simulated).
+
+Result: status scheduled, parts ordered, booking confirmed with Dana Demo.
+Orders that reached the supplier: 1. In the room: Morgan Manager, RepairCoordinator, AuthorityCritic, PartsSourcer, TechDispatcher, ScheduleReporter.
+
+=== CRITIC BLOCKS THE PURCHASE (SIMULATED room, SIMULATED adapters) ===
+  1 Morgan Manager -> @RepairCoordinator
+      @RepairCoordinator coordinate JOB-001
+  2 RepairCoordinator -> @AuthorityCritic (joined)
+      RepairCoordinator added AuthorityCritic.
+  3 RepairCoordinator -> @PartsSourcer (joined)
+      RepairCoordinator added PartsSourcer.
+  4 RepairCoordinator -> @TechDispatcher (joined)
+      RepairCoordinator added TechDispatcher.
+  5 RepairCoordinator (thought)
+      Job JOB-001 on asset DEMO-A: 1 approved part(s), parts status not_ordered. Parts must be sourced first. Recruited: AuthorityCritic, PartsSourcer, TechDispatcher.
+  6 RepairCoordinator -> @PartsSourcer
+      Source the approved parts for job JOB-001.
+  7 PartsSourcer -> @AuthorityCritic
+      Verdict needed before I do this: Order 1 each of DEMO-PART-01 from Demo Supplier A for 125.00 USD.
+  8 AuthorityCritic (thought)
+      Verdict on JOB-001-VRD-0001: blocked.
+      pass: the request is recorded for this job and still open
+      pass: the request in the room matches the recorded request
+      pass: the approval still covers the job
+      pass: the approval names the current version
+      pass: the simulated approval covers a simulated action
+      pass: an authority is configured
+      pass: the authority has not expired
+      pass: the authority allows parts_order
+      pass: the simulated authority covers a simulated action
+      pass: the part is in the approved scope
+      pass: the quantity is the approved quantity
+      pass: the specification is the approved specification
+      pass: the supplier is an allowed supplier
+      pass: the supplier is not blocked by policy
+      pass: the currency is the authority currency
+      pass: the order fits the remaining authority
+      FAIL: the order is within the single-order limit
+  9 AuthorityCritic -> @PartsSourcer
+      BLOCKED JOB-001-VRD-0001. A single order may not exceed 100.00 USD; this one is 125.00 USD.
+ 10 PartsSourcer -> @RepairCoordinator
+      I could not order the parts for job JOB-001.
+ 11 RepairCoordinator -> @Morgan Manager
+      The approved parts were not ordered (job JOB-001).
+      - verdict_blocked: AuthorityCritic blocked "Order 1 each of DEMO-PART-01 from Demo Supplier A for 125.00 USD": A single order may not exceed 100.00 USD; this one is 125.00 USD. It was not executed.
+
+Result: status awaiting_authorization, parts not_ordered.
+Orders that reached the supplier: 0. In the room: Morgan Manager, RepairCoordinator, AuthorityCritic, PartsSourcer, TechDispatcher.
 ```
