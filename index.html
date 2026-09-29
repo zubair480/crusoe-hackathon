@@ -126,6 +126,26 @@
     .home { width:34%; height:4px; border-radius:3px; background:#111; margin:3px auto 6px; flex:none } .cam .home { position:absolute; left:33%; bottom:1.2%; background:#fff; margin:0 }
     body.device:not(.aim) .rep .cd { animation:slideUp .5s cubic-bezier(.2,.8,.2,1) both } .rep .cd:nth-child(3) { animation-delay:.1s } .rep .cd:nth-child(4) { animation-delay:.2s } .rep .cd:nth-child(5) { animation-delay:.3s }
     @keyframes slideUp { from { opacity:0; transform:translateY(10px) } }
+    #b-report.pending { opacity:.6 } #b-report:not(.pending) { background:linear-gradient(90deg,#1f7a44,#2fa35f); border-left-color:#fff }
+    #rpt { position:fixed; inset:0; z-index:20; background:rgba(4,6,8,.72); backdrop-filter:blur(4px); display:none; overflow:auto; padding:70px 16px 40px }
+    body.rpt-open #rpt { display:block; animation:rptIn .35s ease-out }
+    @keyframes rptIn { from { opacity:0 } }
+    .rpt-bar { position:fixed; top:0; left:0; right:0; height:56px; display:flex; align-items:center; gap:10px; padding:0 20px; background:rgba(8,11,14,.92); z-index:21; font:700 13px var(--hud); letter-spacing:2px; text-transform:uppercase }
+    .rpt-bar span { margin-right:auto } .rpt-bar .btn { height:34px }
+    #rpt-doc { max-width:820px; margin:0 auto; background:#fff; color:#111; padding:34px 40px 30px; font:13px/1.45 Calibri,"Segoe UI",Arial,sans-serif; box-shadow:0 30px 80px #000a; animation:rptUp .45s cubic-bezier(.2,.8,.2,1) }
+    @keyframes rptUp { from { transform:translateY(20px); opacity:0 } }
+    #rpt-doc h1 { font:700 18px Calibri,"Segoe UI",Arial,sans-serif; margin:0 0 12px } #rpt-doc h1 .ir { color:#d11 } #rpt-doc h1 .as { color:#0aa3e0; margin-left:6px }
+    #rpt-doc .pics { display:grid; grid-template-columns:1fr 1fr; gap:14px } #rpt-doc figure { margin:0 } #rpt-doc figure img { width:100%; aspect-ratio:4/3; object-fit:cover; display:block; background:#000 }
+    #rpt-doc figcaption { font-size:10.5px; color:#666; margin-top:3px }
+    #rpt-doc ul { margin:14px 0 10px 40px; padding:0 } #rpt-doc li { margin:5px 0; font-size:12.5px } #rpt-doc .eq { color:#0aa3e0; font-weight:700 }
+    #rpt-doc table { width:100%; border-collapse:collapse; background:#d9d9d9; font-size:12px } #rpt-doc th { text-align:left; padding:3px 6px; width:42%; font-weight:700 } #rpt-doc td { text-align:center; padding:3px 6px; font-weight:700 }
+    #rpt-doc td.crit { color:#c4271b } #rpt-doc td.warn { color:#b86e00 } #rpt-doc td.ok { color:#1a7a3a }
+    #rpt-doc h2 { font:700 13.5px Calibri,"Segoe UI",Arial,sans-serif; margin:12px 0 6px; line-height:1.6 } #rpt-doc h2 small { font-weight:400; font-size:11px } #rpt-doc h2 .o { color:#d86a1c; font-weight:400; letter-spacing:.3px }
+    #rpt-doc h2.t { margin-top:18px; padding-top:10px; border-top:2px solid #0aa3e0 } #rpt-doc .tx { background:#f4f8fb; border-left:3px solid #0aa3e0; padding:8px 12px; margin:6px 0 }
+    #rpt-doc .txh { font:700 10.5px Consolas,monospace; color:#0a6c9a; margin-bottom:4px } #rpt-doc .tx p { margin:2px 0 } #rpt-doc .none { color:#777; font-style:italic }
+    #rpt-doc .foot { margin-top:16px; font-size:10px; color:#888; border-top:1px solid #eee; padding-top:6px }
+    @media (max-width:640px) { #rpt-doc { padding:20px 16px } #rpt-doc .pics { grid-template-columns:1fr } }
+    @media print { body > *:not(#rpt) { display:none !important } #rpt { position:static; background:none; padding:0; overflow:visible } .rpt-bar { display:none } #rpt-doc { box-shadow:none; max-width:none; animation:none } html, body { overflow:visible; height:auto; background:#fff } }
     .btn.start { background:linear-gradient(90deg,#ffc440,#ff9a1f); color:#111; border-left-color:#fff; animation:startGlow 2s ease-in-out infinite } .btn.start kbd { color:#5a3b00; border-color:#0003 }
     @keyframes startGlow { 50% { box-shadow:0 0 18px #ffc44088 } }
     .uppin { pointer-events:auto; transform:translate(50%,0); display:flex; flex-direction:column; gap:6px; padding:10px; width:210px; background:rgba(8,11,14,.86); backdrop-filter:blur(6px); border-left:2px solid var(--amber);
@@ -157,6 +177,7 @@
     <span class="simtag">SIMULATED</span>
     <button class="btn start" id="b-start">Start inspection<kbd>S</kbd></button>
     <button class="btn" id="b-home">Overview<kbd>ESC</kbd></button>
+    <button class="btn" id="b-report" hidden>Report<kbd>R</kbd></button>
     <button class="btn" id="b-thermal">Thermal<kbd>T</kbd></button>
   </div>
   <aside id="panel" class="frame"></aside>
@@ -164,6 +185,7 @@
   <div id="keys" class="frame"><span><b>DRAG</b>orbit</span><span><b>WHEEL</b>zoom</span><span><b>CLICK</b>open bucket</span><span><b>CLICK K1</b>close-up</span><span><b>T</b>thermal</span></div>
   <div id="tip"></div>
   <div id="stage"></div>
+  <div id="rpt"><div class="rpt-bar"><span>Inspection report</span><button class="btn" id="rpt-print">Print / PDF</button><button class="btn" id="rpt-close">Close<kbd>ESC</kbd></button></div><article id="rpt-doc"></article></div>
   <div id="device"><div class="frame3">
     <i class="btn-side" style="left:-2px;top:17%;height:5%"></i><i class="btn-side" style="left:-2px;top:25%;height:9%"></i><i class="btn-side" style="left:-2px;top:36%;height:9%"></i><i class="btn-side" style="right:-2px;top:27%;height:14%"></i>
     <div class="bezel"><div class="ph">
@@ -195,7 +217,7 @@
       <div class="glare"></div>
     </div></div>
   </div></div>
-  <script type="module" src="./js/app.js?v=live3"></script>
+  <script type="module" src="./js/app.js?v=rpt1"></script>
   <script type="module" src="./js/integration.js"></script>
 </body>
 </html>

@@ -357,7 +357,9 @@ function analyzePixels(img) {
     if (s > peak) { peak = s; px = x; py = y; }
   }
   const T = (v) => 20 + 60 * v;
-  return { gray, W, H, cx: (n ? sx / n : px) / W, cy: (n ? sy / n : py) / H, px: px / W, py: py / H, box: [bx0 / W, by0 / H, (bx1 + 1) / W, (by1 + 1) / H], areaPct: n / vals.length * 100,
+  let sum = 0; for (const v of vals) sum += v;
+  const stats = { minT: T(q(.005)), maxT: T(q(.999)), avgT: T(sum / vals.length) };
+  return { ...stats, gray, W, H, cx: (n ? sx / n : px) / W, cy: (n ? sy / n : py) / H, px: px / W, py: py / H, box: [bx0 / W, by0 / H, (bx1 + 1) / W, (by1 + 1) / H], areaPct: n / vals.length * 100,
     peakT: T(peak), medT: T(med), dT: T(peak) - T(med), iw: img.width, ih: img.height };
 }
 function drawContain(g, img, W, H) {
@@ -441,10 +443,14 @@ async function analyzeUpload(file) {
   dev.mode = "shot"; devEl.classList.remove("fire"); void devEl.offsetWidth; devEl.classList.add("fire");
   $("ir-shot").getContext("2d").drawImage(dev.cv, 0, 0); $("ir-thumb").getContext("2d").drawImage(dev.cv, 0, 0, 160, 120);
   fillReport(b); fillUpload(b, px, file);
+  report = { b, px, file, no: dev.shots, at: new Date(), ir: $("ir-shot").toDataURL("image/png"), raw: await toDataURL(img), res: null, err: null, pending: true };
+  $("b-report").hidden = false; $("b-report").classList.add("pending");
   $("r-ai").innerHTML = `<span class="spin"></span>Uploading to ${esc(API)} · attaching Plaud voice note · Crusoe vision model analyzing (up to 45 s)…`;
   setTimeout(() => { if (dev.b === b) document.body.classList.remove("aim"); }, 650);
   setTimeout(() => { if (dev.b === b) scrollReport(); }, 3200);
-  const out = await backend; if (dev.b !== b) return;
+  const out = await backend;
+  if (report && report.b === b) { report.res = out.r || null; report.err = out.e || null; report.pending = false; $("b-report").classList.remove("pending"); stage("REPORT READY · PRESS R"); setTimeout(() => stage(""), 2500); }
+  if (dev.b !== b) return;
   renderBackend(out.r, out.e);
 }
 function fillUpload(b, px, file) {
@@ -469,6 +475,64 @@ function fillUpload(b, px, file) {
   $("r-fnd").textContent = hot ? `Hot region about ${px.dT.toFixed(0)} °C above background at the marked point. Estimated from image colors, not radiometric data.` : `Hottest area only ${px.dT.toFixed(1)} °C above background (estimated from colors).`;
   $("r-act").textContent = hot ? "Confirm with a radiometric scan under load; if confirmed, de-energize, LOTO and re-torque the connection." : "No action from this image. Keep on the quarterly route.";
 }
+
+// ---------------------------------------------------------------- inspection report (Fluke-style)
+let report = null;
+async function toDataURL(img) { const c = Object.assign(document.createElement("canvas"), { width: img.width, height: img.height }); c.getContext("2d").drawImage(img, 0, 0); return c.toDataURL("image/png"); }
+const F = (c) => (c * 9 / 5 + 32).toFixed(1);
+const CF = (c) => `${c.toFixed(1)} °C (${F(c)} °F)`;
+function netaOverRef(dT) { // NETA MTS Table 100.18, temperature rise over ambient/reference
+  if (dT > 40) return ["Major discrepancy · repair immediately", "crit"];
+  if (dT > 20) return ["Monitor until corrective measures can be accomplished", "crit"];
+  if (dT > 10) return ["Indicates probable deficiency · repair as time permits", "warn"];
+  if (dT >= 1) return ["Possible deficiency · warrants investigation", "ok"];
+  return ["No deficiency", "ok"];
+}
+async function openReport() {
+  if (!report) { stage("UPLOAD AN IR IMAGE FIRST"); setTimeout(() => stage(""), 1800); return; }
+  const r = report, b = r.b, px = r.px, n = String(r.no).padStart(2, "0");
+  let st = null; try { st = await (await fetch(API + "/api/case", { cache: "no-store" })).json(); } catch { /* offline */ }
+  const transcripts = (st?.inspection?.evidence || []).filter((e) => e.kind === "transcript");
+  const [sev, sevCls] = netaOverRef(px.dT), rec = r.res?.rec, img = (st?.inspection?.evidence || []).find((e) => e.id === r.res?.ev?.id);
+  const rows = [
+    ["File Location", img ? img.uri : r.file.name],
+    ["File Name", r.file.name],
+    ["Image Time", r.at.toLocaleString()],
+    ["Emissivity", "0.95 (default setting)"],
+    ["Background Temp", CF(px.medT) + " · estimated"],
+    ["Transmission", "100% (default setting)"],
+    ["Image Range", `${CF(px.minT)} to ${CF(px.maxT)} · estimated`],
+    ["Average Temp", CF(px.avgT) + " · estimated"],
+    ["Hot Spot", `${CF(px.peakT)} at ${Math.round(px.px * px.iw)}, ${Math.round(px.py * px.ih)} px · estimated`],
+    ["ΔT Hot Spot vs Background", `${px.dT.toFixed(1)} °C (${(px.dT * 9 / 5).toFixed(1)} °F)`],
+    ["Severity (NETA MTS 100.18)", sev],
+    ["Camera Model", "Not in file (PNG/JPEG upload)"],
+    ["IR Sensor Size", `${px.iw} × ${px.ih} (image)`],
+    ["Camera Manufacturer", "Not in file"],
+    ["Calibration Range", "Assumed 20 °C to 80 °C (68 °F to 176 °F) palette scale"],
+    ["Camera Serial Number", "Not in file"],
+    ["Palette", px.gray ? "Grayscale (white-hot)" : "Ironbow"],
+    ["Analysis", rec ? `${rec.recommendation_id} · ${rec.analysis_mode === "live" ? "live Crusoe" : "simulated"} · ${rec.status.replace("_", " ")}` : r.pending ? "Crusoe analysis running…" : `Unavailable: ${r.err?.message || "no result"}`],
+  ];
+  const fnd = rec?.findings?.map((f) => f.description).join(" ") || "";
+  const desc = `This ${b.tag} ${b.name.toLowerCase()} K1 contactor is showing an infrared hot spot about ${px.dT.toFixed(0)} °C (${(px.dT * 9 / 5).toFixed(0)} °F) above background${px.peakT > 60 ? ", consistent with a high-resistance connection" : ""}. ${fnd}`.trim();
+  const reco = `${rec?.repair_scope ? rec.repair_scope.replace(/[.\s]+$/, "") + ". " : ""}${px.dT > 20 ? "We recommend de-energizing, lockout/tagout, inspecting and re-torquing the affected terminal, and replacing the contactor and any damaged cable if heat damage is found." : "Re-scan under load at the next route."} This must be done by qualified personnel.${rec?.missing_information?.length ? " Still needed: " + rec.missing_information.join("; ") + "." : ""}`;
+  const tx = transcripts.length ? transcripts.map((t) => {
+    const lines = (t.segments?.length ? t.segments.map((s) => `${s.speaker ? `<b>${esc(s.speaker)}:</b> ` : ""}${esc(s.text)}`) : String(t.text || "").split("\n").map((l) => esc(l).replace(/^([^:]{1,40}):/, "<b>$1:</b>")));
+    return `<div class="tx"><div class="txh">${t.source === "plaud" ? "PLAUD" : esc(t.source).toUpperCase()} · ${t.mode.toUpperCase()} · ${t.captured_at ? new Date(t.captured_at).toLocaleString() : "time not recorded"}${t.provider_record_id ? ` · ${esc(t.provider_record_id)}` : ""}</div>${lines.map((l) => `<p>${l}</p>`).join("")}</div>`;
+  }).join("") : `<p class="none">No transcription attached to this case yet. Record a Plaud note that names the asset, run the Plaud pull, and upload again.</p>`;
+  $("rpt-doc").innerHTML = `
+    <h1>REPORT #${n} <span class="ir">( IR#${n} )</span> <span class="as">${esc(b.lineup)} · ${esc(b.tag)} ${esc(b.name)}</span></h1>
+    <div class="pics"><figure><img src="${r.ir}" alt="Infrared image with spot markers"><figcaption>Infrared · ${esc(r.file.name)}</figcaption></figure><figure><img src="${r.raw}" alt="Uploaded image"><figcaption>Uploaded image</figcaption></figure></div>
+    <ul><li><b>CLIENT:</b> ${esc(st?.inspection?.site_id || "DEMO-SITE")}</li><li><b>LOCATION:</b> MCC Room 1 · Building 4</li><li><b>AREA 1:</b> ${esc(b.lineup)} · Section ${b.section} · Bucket ${b.row}</li>
+      <li><b>EQUIPMENT NAME:</b> <span class="eq">${esc(b.tag)} ${esc(b.name)} · K1 3-pole contactor 32 A AC-3 with overload relay · 480 V</span></li></ul>
+    <table>${rows.map(([k, v]) => `<tr><th>${esc(k)}</th><td class="${k.startsWith("Severity") ? sevCls : ""}">${esc(v)}</td></tr>`).join("")}</table>
+    <h2>DESCRIPTION &amp; RECOMMENDATION <small>(Please also review the transcription below)</small>: <span class="o">${esc(desc)} ${esc(reco)}</span></h2>
+    <h2 class="t">TRANSCRIPTION <small>(Plaud voice notes attached to this case)</small></h2>${tx}
+    <p class="foot">Temperatures are estimated from image colors, not radiometric data. ${rec?.analysis_mode === "live" ? "Analysis drafted by Crusoe for qualified review; not an approval." : "Analysis mode: simulated."} Generated ${new Date().toLocaleString()} · ThermalDesk</p>`;
+  document.body.classList.add("rpt-open");
+}
+function closeReport() { document.body.classList.remove("rpt-open"); }
 
 // ---------------------------------------------------------------- camera flights
 const ease = (u) => u < .5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
@@ -549,9 +613,12 @@ renderer.domElement.addEventListener("pointermove", (e) => {
   } else tip.style.display = "none";
 });
 document.getElementById("b-home").onclick = () => select(null);
+document.getElementById("b-report").onclick = () => openReport();
+document.getElementById("rpt-close").onclick = () => closeReport();
+document.getElementById("rpt-print").onclick = () => window.print();
 document.getElementById("b-start").onclick = () => select(buckets.get(HOT));
 document.getElementById("b-thermal").onclick = () => setThermal(!thermal);
-addEventListener("keydown", (e) => { if (e.key === "t" || e.key === "T") setThermal(!thermal); if (e.key === "Escape") select(null); if ((e.key === "s" || e.key === "S") && !selected) select(buckets.get(HOT)); });
+addEventListener("keydown", (e) => { if (e.key === "t" || e.key === "T") setThermal(!thermal); if (e.key === "Escape") { if (document.body.classList.contains("rpt-open")) { closeReport(); return; } select(null); } if ((e.key === "r" || e.key === "R") && !e.ctrlKey && !e.metaKey) openReport(); if ((e.key === "s" || e.key === "S") && !selected) select(buckets.get(HOT)); });
 
 // pulsing warning rings on the floor in front of the hot bucket
 const ringM = new THREE.MeshBasicMaterial({ color: 0xff5a1f, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
@@ -648,4 +715,4 @@ renderer.setAnimationLoop(() => {
   controls.update(); if (thermal) tcam.render(scene, camera, clock.elapsedTime); else renderer.render(scene, camera); css.render(scene, camera);
 });
 renderPanel();
-window.__mcc = { scene, camera, buckets, select, setThermal, sim, analyzeUpload, captureIR, dev };
+window.__mcc = { scene, camera, buckets, select, setThermal, sim, analyzeUpload, captureIR, dev, openReport };
