@@ -344,19 +344,29 @@ function drawDetection(g, px, m) {
   g.fillStyle = "#fff"; g.font = `bold 22px ${mono}`; g.fillText(`HOT ${px.peakT.toFixed(1)}°C est`, Math.min(m.ox + m.w - 250, x + 22), Math.max(28, y - 22));
   g.font = `bold 16px ${mono}`; g.fillStyle = "#5cf08a"; g.fillText(`ΔT ${px.dT.toFixed(1)} · area ${px.areaPct.toFixed(1)}%`, 12, 470); g.restore();
 }
-async function backendAnalyze(file) {
+async function backendAnalyze(file, ctx) {
   const get = async () => { const r = await fetch(API + "/api/case", { cache: "no-store" }); if (!r.ok) throw new Error("case " + r.status); return r.json(); };
   const post = async (body) => { const r = await fetch(API + "/api/case", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status); return j; };
+  const upload = async (f, revision) => {
+    const fd = new FormData(); fd.append("file", f); fd.append("expectedRevision", String(revision));
+    const r = await fetch(API + "/api/evidence", { method: "POST", body: fd }); const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || `upload ${r.status}`); return j;
+  };
   let st = await get(), note = "";
-  if (st.job) {
-    if (st.job.status !== "closed") throw new Error(`Active repair job ${st.job.job_id} is ${st.job.status}. Reset the demo in the workflow panel, then upload again.`);
-    st = await post({ command: "reset_demo", expectedRevision: st.revision }); note = "Closed demo job was reset before analysis.";
-  }
-  const fd = new FormData(); fd.append("file", file); fd.append("expectedRevision", String(st.revision));
-  await fetch(API + "/api/evidence", { method: "POST", body: fd, mode: "no-cors" }); // the route sends no CORS headers; confirm via /api/case
-  st = await get();
-  const ev = [...st.inspection.evidence].reverse().find((e) => e.source === "upload" && (e.text || "").includes(file.name));
-  if (!ev) throw new Error("The backend did not record the upload.");
+  if (st.job || st.recommendation) { st = await post({ command: "reset_demo", expectedRevision: st.revision }); note = "Previous demo case was reset for this inspection."; }
+  // context note: what the HMI knows about this asset, so the model has operating conditions
+  const T = ctx.b.state.temps, A = ctx.b.state.amps, px = ctx.px;
+  const text = [
+    `Asset: ${ctx.b.lineup} section ${ctx.b.section} bucket ${ctx.b.row}, ${ctx.b.tag} ${ctx.b.name}. Device: molded-case breaker, K1 3-pole contactor 32 A AC-3 with thermal overload relay, 480 V 3-phase.`,
+    `Operating condition at capture (HMI telemetry, simulated sensors): load ${Math.round(ctx.b.state.load * 100)}% of ${ctx.b.fla} A FLA; phase currents L1 ${A[0].toFixed(1)} A, L2 ${A[1].toFixed(1)} A, L3 ${A[2].toFixed(1)} A; ambient ${sim.amb} C.`,
+    `Line terminal sensor temperatures (simulated): L1 ${T.L1.toFixed(1)} C, L2 ${T.L2.toFixed(1)} C, L3 ${T.L3.toFixed(1)} C.`,
+    `On-device image screening of ${file.name} (color-based estimate, not radiometric): hottest region at ${Math.round(px.px * px.iw)},${Math.round(px.py * px.ih)} px, about ${px.dT.toFixed(0)} C above background assuming a 20-80 C ironbow scale, ${px.areaPct.toFixed(1)}% of frame.`,
+  ].join("\n");
+  const noteFile = new File([text], `hmi-context-${ctx.b.id}.txt`, { type: "text/plain" });
+  await upload(file, st.revision); st = await get();
+  await upload(noteFile, st.revision); st = await get();
+  const ev = [...st.inspection.evidence].reverse().find((e) => e.source === "upload" && e.kind === "thermal_image");
+  if (!ev) throw new Error("The backend did not record the image.");
   st = await post({ command: "analyze", expectedRevision: st.revision });
   return { rec: st.recommendation, ev, note };
 }
@@ -371,7 +381,7 @@ function renderBackend(res, err) {
     ${(r.findings || []).map((f) => `<div class="f"><span class="sev ${sevMap[f.severity] || "ok"}">${esc(f.severity.toUpperCase())}</span> ${esc(f.description)}${f.uncertainties?.length ? `<br><i>${esc(f.uncertainties.join(" · "))}</i>` : ""}</div>`).join("")}
     ${r.repair_scope ? `<div class="f"><b>Scope:</b> ${esc(r.repair_scope)}</div>` : ""}
     ${r.missing_information?.length ? `<div class="f"><b>Needs:</b> ${esc(r.missing_information.join(" · "))}</div>` : ""}
-    ${r.analysis_mode !== "live" ? `<div class="f">Simulated analysis. Not a live Crusoe call.</div>` : ""}`;
+    ${r.analysis_mode !== "live" ? `<div class="f">Simulated analysis. Not a live Crusoe call.</div>` : `<div class="f">Live Crusoe draft for qualified review. Not an approval.</div>`}`;
   $("s2").className = "done"; $("s3").className = "cur";
 }
 async function analyzeUpload(file) {
@@ -379,7 +389,7 @@ async function analyzeUpload(file) {
   if (!/^image\/(png|jpeg)$/.test(file.type)) { stage("PNG OR JPEG ONLY"); return; }
   hideUpload(); dev.b = b; dev.mode = "upload"; dev.shots++;
   let img; try { img = await createImageBitmap(file); } catch { stage("COULD NOT READ THAT IMAGE"); closeDevice(); showUpload(b); return; }
-  const backend = backendAnalyze(file).then((r) => ({ r }), (e) => ({ e }));
+  const backend = backendAnalyze(file, { b, px: analyzePixels(img) }).then((r) => ({ r }), (e) => ({ e }));
   document.body.classList.add("device", "aim", "scanning"); $("r-body").scrollTop = 0;
   const g = dev.cv.getContext("2d"), m = drawContain(g, img, 640, 480);
   $("cam-sp").textContent = "ANALYZING…"; stage("3 / 3 · ANALYZING UPLOADED IR IMAGE");
@@ -391,7 +401,7 @@ async function analyzeUpload(file) {
   dev.mode = "shot"; devEl.classList.remove("fire"); void devEl.offsetWidth; devEl.classList.add("fire");
   $("ir-shot").getContext("2d").drawImage(dev.cv, 0, 0); $("ir-thumb").getContext("2d").drawImage(dev.cv, 0, 0, 160, 120);
   fillReport(b); fillUpload(b, px, file);
-  $("r-ai").innerHTML = `<span class="spin"></span>Uploading to ${esc(API)} and running analysis…`;
+  $("r-ai").innerHTML = `<span class="spin"></span>Uploading to ${esc(API)} · Crusoe vision model analyzing the image (up to 45 s)…`;
   setTimeout(() => { if (dev.b === b) document.body.classList.remove("aim"); }, 650);
   setTimeout(() => { if (dev.b === b) scrollReport(); }, 3200);
   const out = await backend; if (dev.b !== b) return;
