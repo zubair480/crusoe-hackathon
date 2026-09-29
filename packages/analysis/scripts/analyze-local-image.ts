@@ -1,5 +1,5 @@
-import { readFile } from "node:fs/promises";
-import { basename, resolve } from "node:path";
+import { readFile, stat } from "node:fs/promises";
+import { basename, extname, resolve } from "node:path";
 import { analyzeInspection, CrusoeAdapter } from "../src/index.ts";
 import type { Evidence, InspectionPackage } from "../src/types.ts";
 
@@ -16,8 +16,15 @@ if (!imagePath || !transcript) {
 }
 
 const absolutePath = resolve(imagePath);
+const extension = extname(absolutePath).toLowerCase();
+if (![".png", ".jpg", ".jpeg"].includes(extension)) throw new Error("Only PNG and JPEG images are accepted.");
+const metadata = await stat(absolutePath);
+if (!metadata.isFile() || metadata.size < 8 || metadata.size > 5 * 1024 * 1024) throw new Error("Image must be a file between 8 bytes and 5 MB.");
 const bytes = await readFile(absolutePath);
-const extension = absolutePath.toLowerCase().endsWith(".png") ? "png" : "jpeg";
+const isPng = bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+const isJpeg = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes.at(-2) === 0xff && bytes.at(-1) === 0xd9;
+if ((extension === ".png" && !isPng) || ([".jpg", ".jpeg"].includes(extension) && !isJpeg)) throw new Error("Image contents do not match the file extension.");
+const mimeSubtype = isPng ? "png" : "jpeg";
 const timestamp = new Date().toISOString();
 const imageEvidence: Evidence = {
   id: "EV-THERMAL-LOCAL",
@@ -58,9 +65,10 @@ const inspection: InspectionPackage = {
 
 const adapter = new CrusoeAdapter({
   maxTokens: 1024,
+  allowLiveRequests: true,
   resolveImage: async (evidence) => {
     if (evidence.id !== imageEvidence.id) throw new Error(`Unexpected image evidence ${evidence.id}`);
-    return `data:image/${extension};base64,${bytes.toString("base64")}`;
+    return `data:image/${mimeSubtype};base64,${bytes.toString("base64")}`;
   },
 });
 const result = await analyzeInspection(inspection, { adapter });

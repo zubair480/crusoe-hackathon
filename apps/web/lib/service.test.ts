@@ -9,6 +9,7 @@ import type { Command } from './model';
 import { readSchedule } from '@thermaldesk/excel';
 import ExcelJS from 'exceljs';
 import { createAnalysisPorts } from './analysis-ports';
+import { createCoordinationPorts } from './coordination-ports';
 
 let directory: string, service: CaseService;
 beforeEach(async () => { directory = await mkdtemp(join(tmpdir(), 'thermaldesk-test-')); service = new CaseService(new CaseStore(directory)); });
@@ -103,5 +104,19 @@ describe('both workflow pipelines', () => {
     expect((await act('verify')).verification?.result).toBe('mismatch');
     await act('complete'); await act('verify');
     expect((await act('approve_closure', 'Reviewer')).job?.status).toBe('closed');
+  });
+  it('runs Isaac coordination through the web service and closes the same persisted job', async () => {
+    const analysis = createAnalysisPorts(directory);
+    service = new CaseService(new CaseStore(directory), createCoordinationPorts(directory, analysis));
+    let state = await schedule();
+    expect(state.job?.status).toBe('scheduled');
+    expect(state.job?.actions.some(action => action.action_type === 'parts_order' && action.status === 'confirmed')).toBe(true);
+    expect(state.job?.actions.some(action => action.action_type === 'technician_contact' && action.status === 'confirmed')).toBe(true);
+    expect((await readSchedule(service.workbookPath)).rows[0].job_id).toBe(state.job?.job_id);
+    await act('complete');
+    await act('verify');
+    state = await act('approve_closure', 'Coordinator reviewer');
+    expect(state.job?.status).toBe('closed');
+    expect(state.job?.closure_review?.reviewer_id).toBe('Coordinator reviewer');
   });
 });

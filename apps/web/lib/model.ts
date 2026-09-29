@@ -24,7 +24,7 @@ export interface TeamPorts {
   coordinateRepair(recommendation: Recommendation, previous: RepairJob | null): Promise<RepairJob>;
   cancelBooking(job: RepairJob): Promise<RepairJob>;
   notifyManager(job: RepairJob, scheduleResult: ActionReceipt): Promise<RepairJob>;
-  submitCompletion(job: RepairJob): Promise<RepairJob>;
-  closeRepair(job: RepairJob, review: NonNullable<RepairJob['closure_review']>): Promise<RepairJob>;
+  submitCompletion(job: RepairJob, completion: CompletionEvidence): Promise<RepairJob>;
+  closeRepair(job: RepairJob, review: NonNullable<RepairJob['closure_review']>, verification: VerificationDraft): Promise<RepairJob>;
   collectCompletionEvidence(job: RepairJob, scenario: 'complete' | 'wrong_asset' | 'incomplete', version: number): Promise<CompletionEvidence>;
 }

@@ -7,6 +7,7 @@ export interface CrusoeAdapterOptions {
   timeoutMs?: number;
   maxTokens?: number;
   enableThinking?: boolean;
+  allowLiveRequests?: boolean;
   fetchImpl?: typeof fetch;
   resolveImage?: (evidence: Evidence) => Promise<string>;
 }
@@ -42,7 +43,8 @@ export function extractJson(text: string): unknown {
 function isDraft(value: unknown): value is InferenceDraft {
   if (!value || typeof value !== "object") return false;
   const draft = value as Record<string, unknown>;
-  if (!Array.isArray(draft.findings) || typeof draft.repair_scope !== "string" || !Array.isArray(draft.missing_information)) return false;
+  if (!Array.isArray(draft.findings) || typeof draft.repair_scope !== "string" || !Array.isArray(draft.missing_information) ||
+      !draft.missing_information.every((item) => typeof item === "string")) return false;
   return draft.findings.every((finding) => {
     if (!finding || typeof finding !== "object") return false;
     const item = finding as Record<string, unknown>;
@@ -68,6 +70,7 @@ export class CrusoeAdapter implements InferenceAdapter {
   private readonly timeoutMs: number;
   private readonly maxTokens: number;
   private readonly enableThinking: boolean;
+  private readonly allowLiveRequests: boolean;
   private readonly fetchImpl: typeof fetch;
   private readonly resolveImage?: (evidence: Evidence) => Promise<string>;
 
@@ -76,17 +79,22 @@ export class CrusoeAdapter implements InferenceAdapter {
     this.baseUrl = (options.baseUrl ?? process.env.CRUSOE_BASE_URL ?? DEFAULT_BASE_URL).replace(/\/$/, "");
     this.model = options.model ?? process.env.CRUSOE_MODEL ?? DEFAULT_MODEL;
     this.timeoutMs = options.timeoutMs ?? Number(process.env.CRUSOE_TIMEOUT_MS ?? 30_000);
+    if (!Number.isInteger(this.timeoutMs) || this.timeoutMs < 1 || this.timeoutMs > 120_000) {
+      throw new Error("Crusoe timeoutMs must be an integer between 1 and 120000.");
+    }
     this.maxTokens = options.maxTokens ?? Number(process.env.CRUSOE_MAX_TOKENS ?? 1024);
     if (!Number.isInteger(this.maxTokens) || this.maxTokens < 1 || this.maxTokens > 4096) {
       throw new Error("Crusoe maxTokens must be an integer between 1 and 4096.");
     }
     this.enableThinking = options.enableThinking ?? process.env.CRUSOE_ENABLE_THINKING === "true";
+    this.allowLiveRequests = options.allowLiveRequests ?? process.env.CRUSOE_LIVE_REQUESTS_ENABLED === "true";
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.resolveImage = options.resolveImage;
   }
 
   async analyze(inspection: InspectionPackage): Promise<InferenceResponse> {
     if (!this.apiKey) throw new CrusoeInferenceError("not_configured", "CRUSOE_API_KEY is not configured.");
+    if (!this.allowLiveRequests) throw new CrusoeInferenceError("not_configured", "Live Crusoe requests are disabled.");
     const started = Date.now();
     const evidenceSummary = inspection.evidence.map(({ id, kind, asset_id, text, captured_at }) => ({ id, kind, asset_id, text, captured_at }));
     const content: Array<Record<string, unknown>> = [{

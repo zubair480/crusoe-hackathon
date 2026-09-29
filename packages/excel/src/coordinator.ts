@@ -26,6 +26,7 @@ export interface CoordinatorScheduleOptions {
 export function createScheduleAdapter(options: CoordinatorScheduleOptions) {
   return {
     mode: 'live' as const,
+    deduplicates_by_key: true,
     async syncSchedule(request: CoordinatorScheduleRequest): Promise<ActionReceipt> {
       const { job, row } = request;
       const sameTime = (a: string | null, b?: string) =>

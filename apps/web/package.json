@@ -3,12 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "npm --prefix ../.. run build --workspace @thermaldesk/coordination",
     "dev": "next dev --hostname 127.0.0.1",
+    "prebuild": "npm --prefix ../.. run build --workspace @thermaldesk/coordination",
     "build": "next build",
     "start": "next start --hostname 127.0.0.1"
   },
   "dependencies": {
     "@thermaldesk/analysis": "^0.1.0",
+    "@thermaldesk/coordination": "0.1.0",
     "@thermaldesk/contracts": "0.1.0",
     "@thermaldesk/excel": "0.1.0",
     "lucide-react": "^1.48.0",

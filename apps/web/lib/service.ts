@@ -6,6 +6,7 @@ import { readSchedule, syncSchedule } from '@thermaldesk/excel';
 import { CaseStore, seed } from './store';
 import { demoPorts, reviewableDemoScope } from './demo-ports';
 import { createAnalysisPorts } from './analysis-ports';
+import { createCoordinationPorts } from './coordination-ports';
 import type { CaseState, CommandInput, TeamPorts } from './model';
 
 export class CaseService {
@@ -96,7 +97,7 @@ export class CaseService {
           if (!['scheduled', 'awaiting_verification'].includes(job.status)) throw new Error('A scheduled job is required for this completion scenario.');
           state.completion = await this.ports.collectCompletionEvidence(job, input.command, (state.completion?.version ?? 0) + 1);
           state.verification = null;
-          state.job = await this.ports.submitCompletion(job);
+          state.job = await this.ports.submitCompletion(job, state.completion);
           note('Completion statement received', state.completion.comments);
           await writeSchedule();
           break;
@@ -116,7 +117,7 @@ export class CaseService {
           if (completion.reported_status !== 'complete' || completion.unresolved_items.length || completion.asset_id !== job.asset_id || completion.evidence.some(e => e.asset_id !== job.asset_id)) throw new Error('Completion does not match this asset or still has open work.');
           if (verification.job_id !== job.job_id || completion.job_id !== job.job_id || verification.completion_id !== completion.completion_id || verification.completion_version !== completion.version || verification.recommendation_version !== rec.version || job.recommendation_version !== rec.version) throw new Error('Evidence changed after review. Repeat verification on current versions.');
           const review = { reviewer_id: reviewer(), verification_id: verification.verification_id, verification_version: verification.version, completion_version: completion.version, recommendation_version: rec.version, decision: 'approve_closure' as const, reviewed_at: new Date().toISOString(), mode: 'simulated' as const };
-          state.job = await this.ports.closeRepair(job, review);
+          state.job = await this.ports.closeRepair(job, review, verification);
           note('Demo repair verified and closed', `${review.reviewer_id} accepted verification version ${verification.version}. This is a synthetic demonstration, not electrical certification.`);
           await writeSchedule();
           break;
@@ -151,4 +152,5 @@ export class CaseService {
 
 // Demo-only composition root. Replace ports here after reviewing teammate PRs.
 const directory = join(process.cwd(), 'artifacts', 'thermaldesk-demo');
-export const service = new CaseService(new CaseStore(directory), createAnalysisPorts(directory, process.env.THERMALDESK_ANALYSIS_MODE === 'crusoe' ? 'crusoe' : 'fixture'));
+const analysisPorts = createAnalysisPorts(directory, process.env.THERMALDESK_ANALYSIS_MODE === 'crusoe' ? 'crusoe' : 'fixture');
+export const service = new CaseService(new CaseStore(directory), createCoordinationPorts(directory, analysisPorts));

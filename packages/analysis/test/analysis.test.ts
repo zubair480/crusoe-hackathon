@@ -72,7 +72,7 @@ test("reasoning wrappers and fenced model JSON are accepted", () => {
 test("HTTP adapter caps output and parses wrapped Crusoe content", async () => {
   let requestBody: Record<string, unknown> | undefined;
   const adapter = new CrusoeAdapter({
-    apiKey: "test-key", maxTokens: 256,
+    apiKey: "test-key", maxTokens: 256, allowLiveRequests: true,
     fetchImpl: async (_input, init) => {
       requestBody = JSON.parse(String(init?.body));
       return new Response(JSON.stringify({
@@ -91,13 +91,31 @@ test("HTTP adapter caps output and parses wrapped Crusoe content", async () => {
 
 test("HTTP adapter classifies malformed JSON and rate limits", async () => {
   const inspection = await fixture<InspectionPackage>("inspection.json");
-  const malformed = new CrusoeAdapter({ apiKey: "test-key", fetchImpl: async () => new Response("not-json", { status: 200 }) });
+  const malformed = new CrusoeAdapter({ apiKey: "test-key", allowLiveRequests: true, fetchImpl: async () => new Response("not-json", { status: 200 }) });
   await assert.rejects(malformed.analyze(inspection), (error: any) => error.code === "malformed_output");
-  const limited = new CrusoeAdapter({ apiKey: "test-key", fetchImpl: async () => new Response("limited", { status: 429 }) });
+  const limited = new CrusoeAdapter({ apiKey: "test-key", allowLiveRequests: true, fetchImpl: async () => new Response("limited", { status: 429 }) });
   await assert.rejects(limited.analyze(inspection), (error: any) => error.code === "rate_limited");
 });
 
 test("HTTP adapter rejects an unsafe output-token cap", () => {
   assert.throws(() => new CrusoeAdapter({ apiKey: "test-key", maxTokens: 0 }), /maxTokens/);
   assert.throws(() => new CrusoeAdapter({ apiKey: "test-key", maxTokens: 5000 }), /maxTokens/);
+});
+
+test("HTTP adapter refuses direct paid calls unless live requests are enabled", async () => {
+  const inspection = await fixture<InspectionPackage>("inspection.json");
+  let calls = 0;
+  const adapter = new CrusoeAdapter({ apiKey: "test-key", allowLiveRequests: false, fetchImpl: async () => { calls++; return new Response(); } });
+  await assert.rejects(adapter.analyze(inspection), (error: any) => error.code === "not_configured" && /disabled/i.test(error.message));
+  assert.equal(calls, 0);
+});
+
+test("HTTP adapter validates timeout and missing-information members", async () => {
+  assert.throws(() => new CrusoeAdapter({ timeoutMs: 0 }), /timeoutMs/);
+  const inspection = await fixture<InspectionPackage>("inspection.json");
+  const adapter = new CrusoeAdapter({
+    apiKey: "test-key", allowLiveRequests: true,
+    fetchImpl: async () => new Response(JSON.stringify({ choices: [{ message: { content: '{"findings":[],"repair_scope":"Review.","missing_information":[42]}' } }] }), { status: 200 }),
+  });
+  await assert.rejects(adapter.analyze(inspection), (error: any) => error.code === "malformed_output");
 });
