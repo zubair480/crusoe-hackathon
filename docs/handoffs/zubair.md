@@ -1,5 +1,34 @@
 # Zubair handoff
 
+Updated: 2026-09-29 21:49 UTC. Owner: Zubair. Branch: `codex/zubair-app-integration`. Latest pushed implementation: `1920dcc`. Existing PR: https://github.com/zubair480/crusoe-hackathon/pull/1.
+
+## Current upload/report increment
+
+- Diagnosed the user's port-8765 phone upload against Claude's pushed `893a1c3`: its client refused the upload because the current backend repair was scheduled. The server was initially in fixture mode. This was not evidence of a Crusoe inference failure.
+- Fixed the integration branch's workflow bridge: upload now starts analysis using the upload response revision, shows the findings and missing information, exposes the draft report before a repair exists, and preserves saved evidence on analysis failure. No automatic retry, approval or repair reset is introduced.
+- `exportReport(state: CaseState): string` now includes all returned findings, source evidence IDs, uncertainties, analysis blockers and recommendation version/status, with unapproved scope labeled. Provider/file content is escaped.
+- Browser bridge: `thermaldeskWorkflow.upload(file): Promise<void>`, `command(commandName): Promise<void>`, `refresh(): Promise<void>`, `state`, `api`. Existing POST `/api/evidence` -> POST `/api/case` with `{command: "analyze", expectedRevision}` -> GET `/api/report`. No shared business-schema change.
+- Owned files for this increment: `apps/web/lib/report.ts`, its new tests, `apps/web/public/mcc/js/integration.js`, its new regression tests, and frontend/handoff documentation. Another concurrent local session included these implementation files in pushed commit `1920dcc`; they were verified there rather than committed twice. Other in-progress files were preserved.
+- Both inspection review and repair execution remain intact. The current single-case app locks inspection uploads once a repair exists. A separate-case lifecycle is still a future implementation; resetting a demo is an explicit destructive demo operation, not an automatic upload prerequisite.
+
+## Verification and actual modes
+
+- Ran `python -X utf8 scripts/team_status.py` (the unqualified command hit Windows console encoding); read all four live remote handoffs and Claude's latest pushed frontend code.
+- Six new bridge/report regressions passed: upload-to-analysis revision sequencing, early report access, persisted evidence on analysis failure, active-job rejection without mutations, and HTML escaping in UI/report.
+- `npm test`: 62 passed (19 coordination, 10 intake, 23 app/Excel, 10 analysis). `npm run typecheck` and `npm run build`: passed. `npm run test:system`: passed with isolated fixture state, real local workbook writes, approval gates, rebooking/idempotency, wrong-asset and incomplete closure rejection, final report and origin rejection.
+- No provider request, customer-image transmission, demo reset, purchase, call or message was executed by this diagnostic task. Tests used fixtures/mocked providers; local workbook and report generation were real.
+- Read-only browser verification showed the fixed report link and returned findings. During verification another local session changed the running server from fixtures to live configuration and replaced revision 90's scheduled demo with revision 94's live needs-information recommendation. That observed state is not a paid test performed by this task. Do not treat it, existing credentials, or historical budgets below as authorization for further paid calls. Keep no-spend defaults for development.
+- Local setup remains `npm ci`, `npm run dev`; artifacts are ignored local files under the configured `THERMALDESK_ARTIFACT_DIR`. No production deployment is claimed.
+
+## Named dependencies / remaining work
+
+- **Claude:** adopt the bridge/report behavior in the separate phone frontend as detailed in `docs/frontend-handoff.md`. Handle upload responses with CORS, refresh workflow state, show analysis failures as failures, and expose the draft report. Do not infer actionable temperatures or repair instructions from palette colors, and do not automatically reset closed jobs.
+- **Sunny:** preserve missing calibration/load and qualified-review requirements for image-only drafts. This increment does not change the provider interface or authorize additional billable checks.
+- **Isaac / Ali:** their callable coordination and intake modules are present in the integration branch; the prior handoff's claims that those implementations are absent are superseded. Live dispatch remains simulated, and Ali's Plaud adapter is present but was not invoked here.
+- Blockers: no blocker to the verified workflow-panel/report fix. The phone UI remains a separately served frontend; a multi-case flow and technical review remain incomplete. Next step is Claude's frontend adoption, without changing the review gates or cost controls.
+
+## Prior handoff (historical)
+
 Updated: 2026-09-29 20:45 UTC. Owner: Zubair. Branch: `codex/zubair-app-integration`. Latest pushed implementation before this update: `8cd3289`. PR: https://github.com/zubair480/crusoe-hackathon/pull/1.
 
 Status: available backend modules integrated; missing teammate implementations remain explicit. No production deployment or completed frontend is claimed. Claude owns the 3D frontend.
