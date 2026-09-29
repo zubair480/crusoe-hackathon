@@ -22,6 +22,8 @@ export interface ActionSpec {
   /** Start a new attempt when the previous one definitely failed. */
   retry_failed?: boolean;
   extra_evidence_ids?: string[];
+  /** Band runtime: facts the critic needs to decide. Setting this makes the action gated. */
+  verdict_details?: unknown;
   invoke: (idempotency_key: string) => Promise<AdapterOutcome & { data?: unknown }>;
 }
 
@@ -151,6 +153,25 @@ export async function executeAction(run: JobRun, spec: ActionSpec): Promise<Acti
       data: { action_type: spec.action_type, logical_key: spec.logical_key, code: refusal.code },
     });
     return refusal;
+  }
+
+  if (run.requiresVerdicts && spec.verdict_details !== undefined) {
+    const verdict = run.verdictFor(spec.logical_key, spec.action_type, spec.summary, spec.verdict_details);
+    if (verdict.status === 'pending') {
+      await run.persist();
+      return {
+        kind: 'refused',
+        code: 'verdict_pending',
+        message: `Waiting for the critic's verdict ${verdict.request_id} before: ${spec.summary}`,
+      };
+    }
+    if (verdict.status === 'blocked') {
+      return {
+        kind: 'refused',
+        code: 'verdict_blocked',
+        message: `The critic blocked (${verdict.request_id}): ${verdict.reason ?? 'no reason given'}`,
+      };
+    }
   }
 
   const action_id = run.nextActionId();

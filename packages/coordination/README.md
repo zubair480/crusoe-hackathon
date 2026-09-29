@@ -3,8 +3,13 @@
 Repair coordinator for ThermalDesk. It owns the canonical repair-job state, the persisted
 event history and the external action adapters. Owner: Isaac.
 
-Every integration shipped here is **simulated**. No supplier, technician, manager or workbook
-is contacted. BAND is not used; the runtime is an in-process job queue.
+Every supplier, messaging and schedule adapter shipped here is **simulated**. No supplier,
+technician, manager or workbook is contacted.
+
+A job runs on one of two runtimes, recorded with the job: `job_queue` (baseline) or `band`.
+The Band runtime is implemented and has run on Band: on 2026-09-29 the five registered agents
+took the fictional job `JOB-001` from kickoff to a confirmed booking and a report in a Band
+room. Suppliers, messaging and the schedule stayed simulated in that run.
 
 ## Setup
 
@@ -13,8 +18,12 @@ Requires Node.js 20 or newer.
 ```bash
 cd packages/coordination
 npm install --no-package-lock   # Zubair owns the shared lockfile
-npm test                        # type-check, build, 19 tests
-npm run demo                    # prints a happy-path and an exception trace
+npm test                        # type-check, build, 26 tests
+npm run demo                    # baseline: a happy-path and an exception trace
+npm run band:demo               # the crew in a SIMULATED room
+npm run band:check              # is agent_config.yaml complete?
+npm run band                    # connect the crew to Band (needs credentials)
+npm run band:accept -- JOB-001  # record a SIMULATED technician acceptance
 ```
 
 ## Public API
@@ -141,9 +150,75 @@ failure with retry, missing completion evidence, overdue verification.
 
 Environment variable names are in `.env.example`.
 
+## Band runtime
+
+Five agents coordinate one repair through a Band room. Each is a separately registered Band
+agent with its own connection. No agent calls another; each acts only when it is @mentioned.
+
+| Agent | The one job it owns |
+|---|---|
+| `RepairCoordinator` | Opens the case, decides which specialists it needs and recruits them |
+| `PartsSourcer` | Gets quotes and orders the approved parts once the critic has approved |
+| `AuthorityCritic` | Approves or blocks every purchase and booking |
+| `TechDispatcher` | Plans the appointment after the handed-over parts estimate, contacts technicians |
+| `ScheduleReporter` | Updates the schedule and reports to the person who asked |
+
+Agents have no model behind them. Their decisions are deterministic rules over the job store.
+
+**Flow.** A person writes `@RepairCoordinator coordinate JOB-001`. The coordinator recruits
+the specialists the case needs and mentions `PartsSourcer`. The sourcer gets quotes and asks
+`AuthorityCritic` for a verdict. On approval it orders and hands the delivery estimate to
+`TechDispatcher`, which offers an appointment after that estimate. When the technician has
+accepted, the dispatcher asks the critic again, confirms the booking, recruits
+`ScheduleReporter`, and the reporter answers the person with one recommendation.
+
+**What the room carries, and the engine enforces:**
+
+- *Verdict that can be blocked.* On the `band` runtime a parts order and a booking are not
+  executed until a verdict is recorded. A blocked order never reaches the supplier.
+- *Dependent handoff.* The dispatcher plans from the delivery estimate in the sourcer's
+  message. Without that handoff no technician is contacted.
+- *Roster decided at runtime.* A job without parts never recruits `PartsSourcer`.
+  `ScheduleReporter` joins only when there is something to publish.
+
+**Delete test.** Without the room a `band` job orders nothing and contacts nobody
+(`test/band.test.ts`). The baseline `job_queue` runtime stays available for jobs that do not
+use Band.
+
+### Run it on Band
+
+Requires Node.js 22.12 or newer.
+
+1. Sign up at https://app.band.ai and register five agents at https://app.band.ai/agents with
+   exactly these names: `RepairCoordinator`, `PartsSourcer`, `AuthorityCritic`,
+   `TechDispatcher`, `ScheduleReporter`.
+2. `cp agent_config.yaml.example agent_config.yaml` and fill in each `agent_id` and `api_key`.
+   The file is git-ignored.
+3. `npm run band:check`, then `npm run band`. It seeds the fictional job `JOB-001`.
+4. In Band, open a room, add `RepairCoordinator`, and write
+   `@RepairCoordinator coordinate JOB-001`.
+5. Record the technician's reply: `npm run band:accept -- JOB-001` (simulated), or
+   `advanceRepairJob` from a real channel. Then write `@RepairCoordinator update JOB-001`.
+
+Notes from the live run:
+
+- Band's free plan allows 5 participants in a room. The crew is you plus five agents, so
+  `PartsSourcer` leaves once the parts are ordered and `ScheduleReporter` takes its seat.
+- Agents rejoin the rooms they belong to after a restart (`autoSubscribeExistingRooms`).
+- `BAND_DEBUG=1 npm run band` prints what the SDK does.
+- To run the demo again: stop the crew, `npm run band:reset`, `npm run band`, and use a new
+  room.
+
+`createCrewHandler(role, deps)` returns the handler of one agent, and
+`startBandCrew(options)` connects all five. The critic's extra rules are set with
+`policy: { max_single_order_minor, blocked_supplier_ids }`.
+
 ## Not implemented
 
 - No live or sandbox adapter. Calls, SMS and email are not implemented; the only
   communication adapter is simulated.
 - No real supplier integration.
-- BAND is not used.
+- On Band, one flow was run: kickoff to booking and report. The blocked-purchase path and the
+  no-parts path were run only in the simulated room.
+- The application does not yet post job events into the room by itself; a person writes
+  `update <job id>`.

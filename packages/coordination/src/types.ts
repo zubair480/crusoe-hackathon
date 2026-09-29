@@ -72,9 +72,20 @@ export interface JobRequirements {
   latest_end_at: string | null;
 }
 
+/**
+ * Which runtime carries coordination. `job_queue` is the baseline. With `band`, purchases and
+ * bookings wait for a critic's verdict and technician planning waits for the parts handoff,
+ * both of which travel through a Band room.
+ */
+export type CoordinationRuntime = 'job_queue' | 'band';
+
+export type CoordinationStage = 'sourcing' | 'outreach' | 'publication';
+
 export interface CreateRepairJobInput {
   recommendation: Recommendation;
   authority: Authority | null;
+  /** Defaults to `job_queue`. */
+  runtime?: CoordinationRuntime;
   /** Defaults to `JOB-<recommendation_id>`. */
   job_id?: string;
   requirements?: Partial<JobRequirements>;
@@ -173,6 +184,17 @@ export interface JobCancelledEvent extends WorkflowEventBase {
   reason: string;
 }
 
+export interface ActionVerdictRecordedEvent extends WorkflowEventBase {
+  type: 'action_verdict_recorded';
+  request_id: string;
+  verdict: 'approved' | 'blocked';
+  /** The agent or person that decided. */
+  decided_by: string;
+  reason: string;
+  /** Reference of the message that carried the verdict, for example a Band message id. */
+  reference: string;
+}
+
 export type WorkflowEvent =
   | AuthorityConfiguredEvent
   | RecommendationRevisedEvent
@@ -185,7 +207,8 @@ export type WorkflowEvent =
   | VerificationDraftReceivedEvent
   | ClosureReviewRecordedEvent
   | ExceptionApprovedEvent
-  | JobCancelledEvent;
+  | JobCancelledEvent
+  | ActionVerdictRecordedEvent;
 
 export type WorkflowEventType = WorkflowEvent['type'];
 
@@ -202,6 +225,7 @@ export const WORKFLOW_EVENT_TYPES: readonly WorkflowEventType[] = [
   'closure_review_recorded',
   'exception_approved',
   'job_cancelled',
+  'action_verdict_recorded',
 ];
 
 /* ------------------------------------------------------------------ */
@@ -373,6 +397,38 @@ export interface CoordinateOptions {
    * with the approved snapshot; any difference invalidates the approval before any action.
    */
   current_recommendation?: Recommendation;
+  /** Switches the job to this runtime. The choice is persisted with the job. */
+  runtime?: CoordinationRuntime;
+  /** Run one stage only. Each Band agent runs the stage it owns. */
+  stage?: CoordinationStage;
+  /**
+   * Band runtime only: the parts delivery estimate handed over in the room. `null` means
+   * nothing has to arrive. Technician planning does not start without this handoff.
+   */
+  parts_delivery_estimate?: string | null;
+  /** Reference of the message that carried the handoff. */
+  handoff_reference?: string;
+}
+
+export interface VerdictRequest {
+  request_id: string;
+  /** Logical key of the gated action. */
+  logical_key: string;
+  action_type: ActionType;
+  summary: string;
+  details: unknown;
+  status: 'pending' | 'approved' | 'blocked' | 'superseded';
+  requested_at: string;
+  decided_at: string | null;
+  decided_by: string | null;
+  reason: string | null;
+  reference: string | null;
+}
+
+export interface PartsHandoff {
+  parts_delivery_estimate: string | null;
+  reference: string | null;
+  received_at: string;
 }
 
 /* ------------------------------------------------------------------ */
@@ -606,6 +662,7 @@ export interface TimelineEvent {
 }
 
 export interface JobCounters {
+  verdict?: number;
   action: number;
   event: number;
   evidence: number;
@@ -617,6 +674,9 @@ export interface JobCounters {
 export interface JobRecord {
   record_version: 1;
   job: RepairJob;
+  runtime?: CoordinationRuntime;
+  verdict_requests?: VerdictRequest[];
+  parts_handoff?: PartsHandoff | null;
   approved_scope: ApprovedScope;
   approval_state: ApprovalState;
   requirements: JobRequirements;
@@ -663,6 +723,9 @@ export interface JobRepository {
 
 export interface JobDetail {
   job: RepairJob;
+  runtime: CoordinationRuntime;
+  verdict_requests: VerdictRequest[];
+  parts_handoff: PartsHandoff | null;
   approval_valid: boolean;
   approval_invalid_reason: string | null;
   approved_scope: ApprovedScope;
@@ -689,7 +752,7 @@ export interface FollowUpResult {
 }
 
 export interface WorkerTickResult {
-  /** Which runtime executed the work. BAND is not used; this is the baseline job queue. */
+  /** The worker itself is the in-process queue. Each job records its own runtime. */
   runtime: 'job_queue';
   ran_at: string;
   follow_ups: FollowUpResult[];

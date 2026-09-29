@@ -1,0 +1,22 @@
+# Copy to agent_config.yaml and fill in. agent_config.yaml is git-ignored; never commit it.
+# Register each agent at https://app.band.ai/agents with exactly the name shown.
+
+repair_coordinator:      # Band agent name: RepairCoordinator
+  agent_id: ""
+  api_key: ""
+
+parts_sourcer:           # Band agent name: PartsSourcer
+  agent_id: ""
+  api_key: ""
+
+authority_critic:        # Band agent name: AuthorityCritic
+  agent_id: ""
+  api_key: ""
+
+tech_dispatcher:         # Band agent name: TechDispatcher
+  agent_id: ""
+  api_key: ""
+
+schedule_reporter:       # Band agent name: ScheduleReporter
+  agent_id: ""
+  api_key: ""

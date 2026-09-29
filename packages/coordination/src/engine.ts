@@ -72,6 +72,7 @@ const AUTHORITY_CODES = [
   'action_not_authorized',
   'mode_not_authorized',
   'spending_limit_exceeded',
+  'verdict_blocked',
 ];
 const APPROVAL_CODES = [
   'reapproval_required',
@@ -174,6 +175,8 @@ export async function createRepairJob(
   const job_id = input.job_id ?? `JOB-${recommendation.recommendation_id}`;
   requireText(job_id, 'job_id');
   const requirements = resolveRequirements(input.requirements);
+  const runtime = input.runtime ?? 'job_queue';
+  requireOneOf(runtime, ['job_queue', 'band'], 'runtime');
   resolveConfig(context);
 
   return withJobLock(context.repository, job_id, async () => {
@@ -200,6 +203,9 @@ export async function createRepairJob(
     const now = toIso((context.clock ?? systemClock).now());
     const record: JobRecord = {
       record_version: 1,
+      runtime,
+      verdict_requests: [],
+      parts_handoff: null,
       job: {
         schema_version: SCHEMA_VERSION,
         case_id: recommendation.case_id,
@@ -238,7 +244,7 @@ export async function createRepairJob(
       notified_escalation_ids: [],
       events: [],
       needs_coordination: true,
-      counters: { action: 0, event: 0, evidence: 0, follow_up: 0, escalation: 0, offer: 0 },
+      counters: { action: 0, event: 0, evidence: 0, follow_up: 0, escalation: 0, offer: 0, verdict: 0 },
     };
     const run = new JobRun(record, context);
     run.emit({
@@ -250,6 +256,7 @@ export async function createRepairJob(
         scope_fingerprint: scope.scope_fingerprint,
         approval: scope.approval,
         authority_id: authority?.authority_id ?? null,
+        runtime,
       },
     });
     const problem = authorityProblem(run);
@@ -385,6 +392,20 @@ function assertEventShape(event: WorkflowEvent): void {
       requireText(event.cancelled_by, 'event.cancelled_by');
       requireText(event.reason, 'event.reason');
       break;
+    case 'action_verdict_recorded':
+      requireText(event.request_id, 'event.request_id');
+      requireOneOf(event.verdict, ['approved', 'blocked'], 'event.verdict');
+      requireText(event.decided_by, 'event.decided_by');
+      requireText(event.reason, 'event.reason');
+      requireText(event.reference, 'event.reference');
+      break;
+  }
+}
+
+/** A changed authority or approval makes earlier verdicts stale; they are asked for again. */
+function supersedeVerdicts(record: JobRecord): void {
+  for (const request of record.verdict_requests ?? []) {
+    if (request.status === 'pending' || request.status === 'blocked') request.status = 'superseded';
   }
 }
 
@@ -509,6 +530,7 @@ function applyEvent(run: JobRun, event: WorkflowEvent): string {
   switch (event.type) {
     case 'authority_configured': {
       job.authority = clone(event.authority);
+      supersedeVerdicts(record);
       run.resolveEscalations((item) => AUTHORITY_CODES.includes(item.code), 'A new authority was configured.');
       if (job.status === 'awaiting_authorization' && record.approval_state.valid) {
         run.setStatus('planning', `Authority ${event.authority.authority_id} was configured.`);
@@ -572,6 +594,7 @@ function applyEvent(run: JobRun, event: WorkflowEvent): string {
         }
       }
       record.approved_scope = scope;
+      supersedeVerdicts(record);
       record.approval_state = { valid: true, invalid_reason: null, invalidated_at: null };
       job.recommendation_version = scope.version;
       job.unresolved_findings = scope.findings.map((finding) => finding.id);
@@ -821,6 +844,36 @@ function applyEvent(run: JobRun, event: WorkflowEvent): string {
       return `${event.approved_by} approved booking before parts are confirmed: ${event.reason}`;
     }
 
+    case 'action_verdict_recorded': {
+      const request = (record.verdict_requests ?? []).find((item) => item.request_id === event.request_id);
+      if (!request) {
+        throw new Rejection('unknown_verdict_request', `No verdict request ${event.request_id} exists for this job.`);
+      }
+      if (request.status !== 'pending') {
+        throw new Rejection('verdict_already_recorded', `Verdict request ${event.request_id} is already ${request.status}.`);
+      }
+      request.status = event.verdict;
+      request.decided_at = occurredAt;
+      request.decided_by = event.decided_by;
+      request.reason = event.reason;
+      request.reference = event.reference;
+      record.needs_coordination = true;
+      if (event.verdict === 'blocked') {
+        run.escalate(
+          'verdict_blocked',
+          'authority',
+          request.logical_key,
+          `${event.decided_by} blocked "${request.summary}": ${event.reason.replace(/\.+$/, '')}. It was not executed.`,
+        );
+        if (PLANNING_STATUSES.includes(job.status)) {
+          run.setStatus('awaiting_authorization', `${event.decided_by} blocked ${request.action_type}.`);
+        }
+      } else {
+        reconcileBooking(run);
+      }
+      return `${event.decided_by} ${event.verdict} ${request.request_id} (${request.action_type}): ${event.reason}`;
+    }
+
     case 'job_cancelled': {
       if (job.booking && job.booking.status !== 'cancelled') {
         cancelRound(run, {
@@ -947,6 +1000,27 @@ function reconcileBooking(run: JobRun): void {
   }
 
   const logical_key = `booking:${offer.technician_id}:g${offer.generation}`;
+  if (run.requiresVerdicts) {
+    const verdict = run.verdictFor(
+      logical_key,
+      'booking',
+      `Confirm the booking with ${offer.technician_name} for ${offer.start_at}`,
+      {
+        technician_id: offer.technician_id,
+        technician_name: offer.technician_name,
+        start_at: offer.start_at,
+        end_at: offer.end_at,
+        generation: offer.generation,
+        mode: offer.acceptance_mode,
+        acceptance_reference: offer.acceptance_reference,
+      },
+    );
+    if (verdict.status === 'pending') return;
+    if (verdict.status === 'blocked') {
+      run.setStatus('awaiting_authorization', `The critic blocked the booking: ${verdict.reason ?? 'no reason given'}`);
+      return;
+    }
+  }
   let entry = record.ledger.find((item) => item.logical_key === logical_key);
   if (!entry) {
     const action_id = run.nextActionId();
@@ -1254,23 +1328,45 @@ export async function coordinateRepair(
 async function coordinate(run: JobRun, adapters: CoordinationAdapters, options: CoordinateOptions): Promise<void> {
   const { record, job } = run;
   const open = job.status !== 'closed' && job.status !== 'cancelled';
+  const runs = (stage: 'sourcing' | 'outreach' | 'publication') => options.stage === undefined || options.stage === stage;
+
+  if (options.runtime && (record.runtime ?? 'job_queue') !== options.runtime) {
+    record.runtime = options.runtime;
+    run.emit({
+      type: 'runtime_selected',
+      summary: `Coordination runtime is now ${options.runtime}.`,
+      data: { runtime: options.runtime },
+    });
+  }
+  if (options.parts_delivery_estimate !== undefined) {
+    record.parts_handoff = {
+      parts_delivery_estimate: options.parts_delivery_estimate,
+      reference: options.handoff_reference ?? null,
+      received_at: run.nowIso(),
+    };
+    run.emit({
+      type: 'parts_handoff_received',
+      summary: `Parts handoff received: ${options.parts_delivery_estimate ?? 'nothing has to arrive'}${options.handoff_reference ? ` (message ${options.handoff_reference})` : ''}.`,
+      data: record.parts_handoff,
+    });
+  }
 
   if (open && options.current_recommendation) {
     const current = options.current_recommendation;
     if (current.recommendation_id === job.recommendation_id) invalidateIfChanged(run, current);
   }
 
-  await publishCancelledRounds(run, adapters);
+  if (runs('publication')) await publishCancelledRounds(run, adapters);
 
   if (job.status === 'cancelled') {
-    await publishFinal(run, adapters, 'job_cancelled', 'Repair job cancelled');
+    if (runs('publication')) await publishFinal(run, adapters, 'job_cancelled', 'Repair job cancelled');
   } else if (job.status === 'closed') {
-    await publishFinal(run, adapters, 'closure_verified', 'Repair verified and closed');
+    if (runs('publication')) await publishFinal(run, adapters, 'closure_verified', 'Repair verified and closed');
   } else {
-    if (PLANNING_STATUSES.includes(job.status)) {
+    if (PLANNING_STATUSES.includes(job.status) && (runs('sourcing') || runs('outreach'))) {
       const problem = planningProblem(run);
       if (problem) {
-        run.escalate(problem.code, problem.code.startsWith('a') && problem.code.startsWith('approval') ? 'reviewer' : problem.target, problem.subject, problem.message);
+        run.escalate(problem.code, problem.target, problem.subject, problem.message);
         run.setStatus('awaiting_authorization', problem.message);
       } else {
         run.resolveEscalations(
@@ -1279,21 +1375,23 @@ async function coordinate(run: JobRun, adapters: CoordinationAdapters, options: 
         );
         if (job.status === 'blocked') startRetryRound(run);
         run.setStatus('coordinating', 'Approval and authority are valid.');
-        await sourceParts(run, adapters);
-        if (job.status === 'coordinating') await contactTechnicians(run, adapters);
-        reconcileBooking(run);
-        if (job.status === 'coordinating' && job.booking?.status === 'confirmed') {
-          if (partsSupportAppointment(record, job.booking.start_at, run.config).supported) {
-            run.setStatus('scheduled', 'The confirmed appointment is still supported.');
+        if (runs('sourcing')) await sourceParts(run, adapters);
+        if (runs('outreach')) {
+          if (job.status === 'coordinating') await contactTechnicians(run, adapters);
+          reconcileBooking(run);
+          if (job.status === 'coordinating' && job.booking?.status === 'confirmed') {
+            if (partsSupportAppointment(record, job.booking.start_at, run.config).supported) {
+              run.setStatus('scheduled', 'The confirmed appointment is still supported.');
+            }
           }
         }
       }
     }
-    if (job.status === 'scheduled') await publishBooking(run, adapters);
+    if (job.status === 'scheduled' && runs('publication')) await publishBooking(run, adapters);
   }
 
-  await notifyEscalations(run, adapters);
-  if (record.needs_coordination) {
+  if (runs('publication')) await notifyEscalations(run, adapters);
+  if (record.needs_coordination && options.stage === undefined) {
     record.needs_coordination = false;
     run.markDirty();
   }
@@ -1343,6 +1441,13 @@ function startRetryRound(run: JobRun): void {
 }
 
 function requireAuthorization(run: JobRun, refusal: ActionRefusal, subject: string): void {
+  // A pending verdict is ordinary waiting, not a problem to escalate.
+  if (refusal.code === 'verdict_pending') return;
+  if (refusal.code === 'verdict_blocked') {
+    // Already escalated when the verdict was recorded.
+    if (PLANNING_STATUSES.includes(run.job.status)) run.setStatus('awaiting_authorization', refusal.message);
+    return;
+  }
   run.escalate(refusal.code, refusal.code.startsWith('approval') ? 'reviewer' : 'authority', subject, refusal.message);
   if (PLANNING_STATUSES.includes(run.job.status)) run.setStatus('awaiting_authorization', refusal.message);
 }
@@ -1468,6 +1573,20 @@ async function sourceParts(run: JobRun, adapters: CoordinationAdapters): Promise
         summary: `Order ${part.quantity} ${part.unit} of ${part.part_id} from ${supplier.name} for ${formatMoney(total, quote.currency)}`,
         requires_approval: true,
         deduplicates_by_key: supplier.deduplicates_by_key ?? false,
+        verdict_details: {
+          part_id: part.part_id,
+          approved_specification: part.approved_specification,
+          quantity: part.quantity,
+          unit: part.unit,
+          supplier_id: supplier.supplier_id,
+          supplier_name: supplier.name,
+          mode: supplier.mode,
+          unit_price_minor: quote.unit_price_minor,
+          total_minor: total,
+          currency: quote.currency,
+          committed_minor: committed,
+          estimated_delivery_at: quote.estimated_delivery_at,
+        },
         invoke: async (idempotency_key) => {
           const outcome = await supplier.placeOrder({
             idempotency_key,
@@ -1585,10 +1704,25 @@ async function contactTechnicians(run: JobRun, adapters: CoordinationAdapters): 
 
   const plan = planParts(record);
   if (!plan.plannable) return;
+  let partsDelivery = plan.latest_delivery_at;
+  if (run.requiresVerdicts) {
+    // Band runtime: the appointment is planned from the estimate handed over in the room.
+    const handoff = record.parts_handoff ?? null;
+    if (!handoff) {
+      if (!record.events.some((item) => item.type === 'parts_handoff_missing')) {
+        run.emit({
+          type: 'parts_handoff_missing',
+          summary: 'Technician planning waits for the parts handoff in the Band room.',
+        });
+      }
+      return;
+    }
+    partsDelivery = handoff.parts_delivery_estimate;
+  }
   const hasException = record.exceptions.some((item) => item.exception === 'schedule_before_parts');
   let earliest = run.nowMs();
-  if (plan.latest_delivery_at && !hasException) {
-    earliest = Math.max(earliest, Date.parse(plan.latest_delivery_at) + run.config.parts_buffer_minutes * 60_000);
+  if (partsDelivery && !hasException) {
+    earliest = Math.max(earliest, Date.parse(partsDelivery) + run.config.parts_buffer_minutes * 60_000);
   }
   if (record.requirements.earliest_start_at) {
     earliest = Math.max(earliest, Date.parse(record.requirements.earliest_start_at));
@@ -2117,6 +2251,29 @@ export async function runWorkerTick(
   };
 }
 
+/** Chooses the runtime for a job without running any stage. The choice is persisted. */
+export async function selectCoordinationRuntime(
+  job_id: string,
+  runtime: 'job_queue' | 'band',
+  context: CoordinationContext,
+): Promise<RepairJob> {
+  requireText(job_id, 'job_id');
+  requireOneOf(runtime, ['job_queue', 'band'], 'runtime');
+  return withJobLock(context.repository, job_id, async () => {
+    const run = await loadRun(job_id, context);
+    if ((run.record.runtime ?? 'job_queue') !== runtime) {
+      run.record.runtime = runtime;
+      run.emit({
+        type: 'runtime_selected',
+        summary: `Coordination runtime is now ${runtime}.`,
+        data: { runtime },
+      });
+      await run.persist();
+    }
+    return clone(run.job);
+  });
+}
+
 /* ------------------------------------------------------------------ */
 /* Read operations                                                     */
 /* ------------------------------------------------------------------ */
@@ -2139,6 +2296,9 @@ export async function getJobDetail(job_id: string, context: CoordinationContext)
   const record = clone((await loadRun(job_id, context)).record);
   return {
     job: record.job,
+    runtime: record.runtime ?? 'job_queue',
+    verdict_requests: record.verdict_requests ?? [],
+    parts_handoff: record.parts_handoff ?? null,
     approval_valid: record.approval_state.valid,
     approval_invalid_reason: record.approval_state.invalid_reason,
     approved_scope: record.approved_scope,
