@@ -68,3 +68,36 @@ test("reasoning wrappers and fenced model JSON are accepted", () => {
   assert.deepEqual(parsed.findings, []);
   assert.equal(parsed.repair_scope, "Review evidence.");
 });
+
+test("HTTP adapter caps output and parses wrapped Crusoe content", async () => {
+  let requestBody: Record<string, unknown> | undefined;
+  const adapter = new CrusoeAdapter({
+    apiKey: "test-key", maxTokens: 256,
+    fetchImpl: async (_input, init) => {
+      requestBody = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({
+        id: "req-test", model: "test-model", usage: { prompt_tokens: 100, completion_tokens: 40, total_tokens: 140 },
+        choices: [{ message: { content: '<think>hidden</think>```json\n{"findings":[],"repair_scope":"Qualified review required.","missing_information":[]}\n```' } }],
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    },
+  });
+  const inspection = await fixture<InspectionPackage>("inspection.json");
+  const result = await adapter.analyze(inspection);
+  assert.equal(requestBody?.max_tokens, 256);
+  assert.deepEqual(requestBody?.chat_template_kwargs, { enable_thinking: false });
+  assert.equal(result.draft.repair_scope, "Qualified review required.");
+  assert.equal(result.telemetry.usage?.total_tokens, 140);
+});
+
+test("HTTP adapter classifies malformed JSON and rate limits", async () => {
+  const inspection = await fixture<InspectionPackage>("inspection.json");
+  const malformed = new CrusoeAdapter({ apiKey: "test-key", fetchImpl: async () => new Response("not-json", { status: 200 }) });
+  await assert.rejects(malformed.analyze(inspection), (error: any) => error.code === "malformed_output");
+  const limited = new CrusoeAdapter({ apiKey: "test-key", fetchImpl: async () => new Response("limited", { status: 429 }) });
+  await assert.rejects(limited.analyze(inspection), (error: any) => error.code === "rate_limited");
+});
+
+test("HTTP adapter rejects an unsafe output-token cap", () => {
+  assert.throws(() => new CrusoeAdapter({ apiKey: "test-key", maxTokens: 0 }), /maxTokens/);
+  assert.throws(() => new CrusoeAdapter({ apiKey: "test-key", maxTokens: 5000 }), /maxTokens/);
+});

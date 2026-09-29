@@ -22,7 +22,7 @@ Business objects use the exact snake_case v1 contract. `AnalysisResult.telemetry
 1. Use Node.js 22.6 or newer.
 2. Copy `.env.example` values into your secret manager or shell. Never commit the key.
 3. Confirm the model is available to your Crusoe project using `GET /v1/models`. The documented default as of 2026-09-29 is `nvidia/Nemotron-3-Nano-Omni-Reasoning-30B-A3B`, selected for multimodal input. Override `CRUSOE_MODEL` rather than relying on an old identifier.
-4. Construct `CrusoeAdapter`. If evidence URIs are private or local, pass `resolveImage`, which must return an authorized HTTPS URL or a supported data URL. The adapter never assumes a `repo://` URI is remotely accessible.
+4. Construct `CrusoeAdapter`. If evidence URIs are private or local, pass `resolveImage`, which must return an authorized HTTPS URL or a supported data URL. The adapter never assumes a `repo://` URI is remotely accessible. Output is capped at 1,024 tokens by default. Thinking is disabled by default for this schema-extraction task so hidden reasoning cannot consume the entire output budget; both settings can be explicitly overridden.
 
 ```ts
 const adapter = new CrusoeAdapter({
@@ -45,10 +45,12 @@ Run checks from this directory:
 npm test
 ```
 
-Send a local JPEG/PNG plus a technician transcription to Crusoe without copying the image into Git:
+The local image command is billable and requires both the live environment flag and an explicit command flag. Send an authorized JPEG/PNG plus a technician transcription without copying the image into Git:
 
 ```bash
-npm run analyze:image -- ~/Downloads/thermal-contactor.jpg "This is contactor C12. The technician reported a burning smell and intermittent motor trips."
+CRUSOE_LIVE_REQUESTS_ENABLED=true npm run analyze:image -- ~/Downloads/thermal-contactor.jpg "This is contactor C12. The technician reported a burning smell and intermittent motor trips." --allow-billable-request
 ```
+
+For a bounded synthetic verification, use `apps/web/scripts/verify-crusoe.mjs`. It makes exactly one request, never retries, requires the same double opt-in, prints sanitized telemetry and stores the synthetic result only under ignored `artifacts/`.
 
 A real technical evaluation still requires radiometric/calibrated data, known operating conditions, equipment specifications/history, appropriate comparison measurements, and review by a qualified person.
