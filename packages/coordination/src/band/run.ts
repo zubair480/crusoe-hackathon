@@ -105,14 +105,24 @@ try {
   console.log('Seeded fictional job JOB-001 from fixtures/approved-recommendation.json.');
 }
 
-const crew = await startBandCrew({ context, adapters, config_path: configPath });
+const stamp = () => new Date().toISOString();
+const crew = await startBandCrew({
+  context,
+  adapters,
+  config_path: configPath,
+  onNotice: (notice) => console.log(`${stamp()} ${notice}`),
+});
+process.on('exit', (code) => console.log(`${stamp()} The crew process is exiting with code ${code}.`));
+process.on('unhandledRejection', (reason) => console.log(`${stamp()} Unhandled rejection: ${String(reason)}`));
 console.log(`\nThe crew is connected to Band: ${crew.roles.join(', ')}.`);
 console.log('Suppliers, messaging and the schedule are SIMULATED. Only the coordination runs on Band.');
 console.log('In a Band room with RepairCoordinator, write:  @RepairCoordinator coordinate JOB-001');
 console.log('Press Ctrl+C to stop.');
-const stop = async () => {
+const stop = (signal: string) => async () => {
+  console.log(`${stamp()} Received ${signal}; disconnecting the crew.`);
   await crew.stop();
   process.exit(0);
 };
-process.on('SIGINT', stop);
-process.on('SIGTERM', stop);
+process.on('SIGINT', stop('SIGINT'));
+process.on('SIGTERM', stop('SIGTERM'));
+process.on('SIGHUP', stop('SIGHUP'));

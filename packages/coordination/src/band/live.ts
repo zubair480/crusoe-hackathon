@@ -9,11 +9,17 @@ export interface LiveCrewOptions extends CrewDeps {
   /** Defaults to `./agent_config.yaml`. The file holds API keys and must stay out of git. */
   config_path?: string;
   roles?: readonly BandRole[];
+  /** How often each agent's connection is checked. Defaults to 15 seconds. */
+  supervise_every_ms?: number;
+  /** Called when an agent is found stopped or has been reconnected. */
+  onNotice?: (notice: string) => void;
 }
 
 export interface LiveCrew {
   readonly transport: 'band';
   readonly roles: readonly BandRole[];
+  /** Connection state of each agent as the SDK reports it. */
+  states(): Record<string, string>;
   stop(): Promise<void>;
 }
 
@@ -25,8 +31,9 @@ export async function startBandCrew(options: LiveCrewOptions): Promise<LiveCrew>
   const roles = options.roles ?? BAND_ROLES;
   // Read every credential first, so a missing one stops the start before anything connects.
   const configs = roles.map((role) => ({ role, config: sdk.loadAgentConfig(ROLE_CONFIG_KEYS[role], options.config_path) }));
-  const agents: { stop(): Promise<unknown> }[] = [];
-  for (const { role, config } of configs) {
+  type Live = InstanceType<typeof sdk.Agent>;
+  const agents = new Map<BandRole, Live>();
+  const create = (role: BandRole, config: (typeof configs)[number]['config']): Live => {
     const handler = createCrewHandler(role, options);
     const adapter = new sdk.GenericAdapter(async ({ message, tools }) => {
       const lookupPeers = tools.lookupPeers?.bind(tools);
@@ -49,21 +56,57 @@ export async function startBandCrew(options: LiveCrewOptions): Promise<LiveCrew>
         },
       });
     });
-    const agent = sdk.Agent.create({
+    return sdk.Agent.create({
       adapter,
       config,
       // A restarted agent must rejoin the rooms it already belongs to, or it stays silent.
       agentConfig: { autoSubscribeExistingRooms: true },
       ...(logger ? { logger } : {}),
     });
+  };
+
+  for (const { role, config } of configs) {
+    const agent = create(role, config);
     await agent.start();
-    agents.push(agent);
+    agents.set(role, agent);
   }
+
+  // An agent whose connection ended is replaced. The timer also keeps the process alive, so
+  // the crew cannot exit quietly while it is meant to be listening.
+  let stopping = false;
+  let checking = false;
+  const notice = options.onNotice ?? (() => undefined);
+  const timer = setInterval(async () => {
+    if (stopping || checking) return;
+    checking = true;
+    try {
+      for (const { role, config } of configs) {
+        const status = agents.get(role)?.state.status ?? 'missing';
+        if (status === 'running' || status === 'starting') continue;
+        notice(`${role} is ${status}; reconnecting.`);
+        try {
+          await agents.get(role)?.stop().catch(() => undefined);
+          const agent = create(role, config);
+          await agent.start();
+          agents.set(role, agent);
+          notice(`${role} is connected again.`);
+        } catch (error) {
+          notice(`${role} could not reconnect: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+    } finally {
+      checking = false;
+    }
+  }, options.supervise_every_ms ?? 15_000);
+
   return {
     transport: 'band',
     roles,
+    states: () => Object.fromEntries([...agents].map(([role, agent]) => [role, agent.state.status])),
     async stop() {
-      for (const agent of agents) await agent.stop();
+      stopping = true;
+      clearInterval(timer);
+      for (const agent of agents.values()) await agent.stop();
     },
   };
 }
