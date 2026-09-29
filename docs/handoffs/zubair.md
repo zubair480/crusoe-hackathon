@@ -1,5 +1,15 @@
 # Zubair handoff
 
+## Completion evidence upload — 2026-09-29 22:40 UTC
+
+Owner: Zubair. Branch: `codex/zubair-app-integration`. Latest pushed implementation: `706a5af`.
+
+- Added `POST /api/completion` for actual local PNG/JPEG/PDF/text uploads plus an operator-entered completion statement. Public app operations: `uploadCompletion(request: Request, service: CaseService): Promise<Response>` and `CaseService.submitUploadedCompletion(input: CompletionSubmission): Promise<CaseState>`. Input fields and frontend behavior are documented in `docs/frontend-handoff.md`; shared v1 business objects are unchanged.
+- Uses Ali's `collectCompletionEvidence` and Isaac's canonical completion event. Keeps declared wrong-asset identity, increments completion versions, invalidates prior verification, rejects stale requests and closed/cancelled jobs, retains original files, and attempts actual Excel updates. Separate comparison and human demo review remain required. Reports now show completion version, reported status and per-evidence provenance instead of incorrectly claiming all evidence is simulated.
+- Verification: 82 offline tests passed (26 coordination, 10 intake, 36 app/Excel, 10 analysis), typecheck passed, production build passed, isolated production HTTP system workflow passed through uploaded completion, stale retry rejection, verification, closure, real workbook read-back and report export. An initial full-suite run concurrent with the production build hit two existing filesystem setup timeouts; the subsequent full suite passed without changing timeouts. The existing Plaud build-tracing warning remains.
+- Actual modes: files, persistence, workbook and report are real local operations; uploaded test content is fictional. Analysis, suppliers, booking, messaging and reviewer decisions stayed simulated. No billable calls, live Band delivery, Plaud pull, purchases or third-party messages. No environment credentials changed. Existing unrelated/concurrent local work is excluded.
+- **Claude:** wire the completion form to the documented multipart API, then show verification checks and the separate review action. Frontend wiring is still outstanding; this increment does not edit your scene/components. **Ali / Isaac:** existing intake and coordinator interfaces are reused unchanged. No backend blocker. Existing demo authentication and single-case limitations remain. Both pipelines passed; no deployment or real repair certification is claimed.
+
 ## Isaac API integration — 2026-09-29 22:08 UTC
 
 Owner: Zubair. Branch: `codex/zubair-app-integration`. Latest pushed implementation: `8377b39`. API usage and payloads: [Isaac API integration](../isaac-api-integration.md).
