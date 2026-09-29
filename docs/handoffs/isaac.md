@@ -1,10 +1,10 @@
 # Isaac handoff
 
-- **Updated (UTC):** 2026-09-29T21:22Z
+- **Updated (UTC):** 2026-09-29T21:32Z
 - **Owner / branch:** Isaac · `codex/isaac-repair-coordination`
 - **Owned paths:** `packages/coordination/`, `docs/handoffs/isaac.md`
-- **Status:** all three increments implemented and tested with SIMULATED adapters only. A Band runtime is implemented. Its five agents are registered on Band and connected live at 2026-09-29T21:22Z. The full room flow has been verified in a SIMULATED room; on Band itself only the connection is verified so far.
-- **Latest pushed implementation commit:** `65e0fea`
+- **Status:** all three increments implemented and tested with SIMULATED adapters only. A Band runtime is implemented and ran on Band at 2026-09-29T21:32Z: five registered agents took fictional job JOB-001 from kickoff to a confirmed booking and a report in a Band room, with simulated suppliers, messaging and schedule.
+- **Latest pushed implementation commit:** `62468b0`
 - **Uncommitted local work:** none
 
 ## What works
@@ -15,7 +15,7 @@ on the v1 contract. Setup, wiring and rules are in `packages/coordination/README
 ```bash
 cd packages/coordination
 npm install --no-package-lock
-npm test           # 25 tests, all passing
+npm test           # 26 tests, all passing
 npm run demo       # baseline happy-path and exception traces
 npm run band:demo  # the Band crew in a simulated room
 ```
@@ -67,7 +67,7 @@ as `data/private/coordination`. `createInMemoryJobRepository()` is for tests.
 
 ## Checks performed
 
-`npm test` in `packages/coordination`: 25 tests, 25 passing. Every `RepairJob` the tests
+`npm test` in `packages/coordination`: 26 tests, 26 passing. Every `RepairJob` the tests
 produce is validated against `contracts/v1.schema.json`.
 
 | Acceptance check | Result |
@@ -94,7 +94,7 @@ verified closure published to the schedule adapter and the timeline.
 | Calls, SMS, email | not implemented | No live or sandbox adapter exists. |
 | Schedule (Excel) | simulated stand-in | `createSimulatedSchedule`. No workbook was changed. |
 | Job store | local files | Real persistence on local disk. |
-| BAND | live connection | Five agents registered at app.band.ai and connected with `@band-ai/sdk` 0.4.7 at 2026-09-29T21:22Z. The room flow on Band is not yet verified; it is verified in a simulated room. |
+| BAND | live | Five agents registered at app.band.ai, `@band-ai/sdk` 0.4.7. One full flow ran in a Band room at 2026-09-29T21:32Z: recruit, critic verdict on the order, parts handoff, critic verdict on the booking, report. The blocked-purchase and no-parts paths ran only in the simulated room. |
 | Baseline runtime | local | In-process job queue. Each job records which runtime it uses. |
 
 Nothing outside this machine changed. No live integration has been exercised.
@@ -153,7 +153,8 @@ the git-ignored `packages/coordination/agent_config.yaml` on Isaac's machine onl
 
 ## Remaining issues
 
-- On Band itself only the connection of the five agents is verified, not yet a full room flow.
+- On Band only the booking flow was run. The blocked-purchase and no-parts paths ran in the simulated room only.
+- Band's free plan allows 5 participants per room, so `PartsSourcer` leaves when its work is done and `ScheduleReporter` takes its seat.
 - The app does not post job events into the Band room by itself; a person writes `update <job id>`.
 - No live or sandbox communication adapter. A real channel needs an account, credentials and
   an explicit list of consenting recipients.
