@@ -8,6 +8,7 @@ import { exportReport } from './report';
 import type { Command } from './model';
 import { readSchedule } from '@thermaldesk/excel';
 import ExcelJS from 'exceljs';
+import { createAnalysisPorts } from './analysis-ports';
 
 let directory: string, service: CaseService;
 beforeEach(async () => { directory = await mkdtemp(join(tmpdir(), 'thermaldesk-test-')); service = new CaseService(new CaseStore(directory)); });
@@ -91,5 +92,16 @@ describe('both workflow pipelines', () => {
     state = await service.command({ command: 'reconcile_schedule', expectedRevision: state.revision, reviewer: 'Reviewer', expectedWorkbookFingerprint: snapshot.fingerprint! });
     expect(state.schedule.rows[0].technician_name).toBe('Alex Morgan (demo)');
     expect(state.events.some(e => e.title === 'Workbook reconciliation authorized')).toBe(true);
+  });
+  it('integrates Sunny analysis, persists sanitized telemetry and compares completion through his module', async () => {
+    service = new CaseService(new CaseStore(directory), createAnalysisPorts(directory));
+    expect((await act('analyze')).recommendation?.status).toBe('needs_information');
+    const telemetry = JSON.parse((await readFile(join(directory, 'analysis-telemetry.jsonl'), 'utf8')).trim());
+    expect(telemetry.provider).toBe('validation');
+    expect(telemetry).not.toHaveProperty('apiKey');
+    await schedule(); await act('wrong_asset');
+    expect((await act('verify')).verification?.result).toBe('mismatch');
+    await act('complete'); await act('verify');
+    expect((await act('approve_closure', 'Reviewer')).job?.status).toBe('closed');
   });
 });

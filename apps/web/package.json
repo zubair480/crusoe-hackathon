@@ -8,6 +8,7 @@
     "start": "next start --hostname 127.0.0.1"
   },
   "dependencies": {
+    "@thermaldesk/analysis": "^0.1.0",
     "@thermaldesk/contracts": "0.1.0",
     "@thermaldesk/excel": "0.1.0",
     "lucide-react": "^1.48.0",

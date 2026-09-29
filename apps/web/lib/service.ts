@@ -5,6 +5,7 @@ import { assertContract, type Evidence } from '@thermaldesk/contracts';
 import { readSchedule, syncSchedule } from '@thermaldesk/excel';
 import { CaseStore, seed } from './store';
 import { demoPorts, reviewableDemoScope } from './demo-ports';
+import { createAnalysisPorts } from './analysis-ports';
 import type { CaseState, CommandInput, TeamPorts } from './model';
 
 export class CaseService {
@@ -37,7 +38,7 @@ export class CaseService {
           state.recommendation = await this.ports.analyzeInspection(state.inspection);
           if (!['draft', 'needs_information'].includes(state.recommendation.status) || state.recommendation.approval) throw new Error('Analysis cannot approve its own recommendation.');
           state.scenarioLoaded = false;
-          note('Inspection reviewed by demo adapter', 'Missing thermal data remains unresolved. Crusoe inference is not connected yet.');
+          note('Inspection analysis returned', state.recommendation.analysis_mode === 'live' ? 'Crusoe returned a draft for qualified review; no repair was authorized.' : 'Validation or simulated analysis returned. This result is not proof of a live Crusoe call.', state.recommendation.analysis_mode === 'live' ? 'live' : 'simulated');
           break;
         case 'load_demo_scope':
           if (state.job) throw new Error('Reset the demo before changing its scope.');
@@ -105,7 +106,7 @@ export class CaseService {
           if (!state.recommendation || !state.completion) throw new Error('Collect completion evidence before comparison.');
           if (job.status === 'closed') throw new Error('This job is already closed.');
           state.verification = await this.ports.compareCompletion(job, state.recommendation, state.completion);
-          note('Completion compared', `Demo comparison: ${state.verification.result.replaceAll('_', ' ')}. A person must review before closure.`);
+          note('Completion compared', `Evidence comparison: ${state.verification.result.replaceAll('_', ' ')}. A person must review before closure.`, state.verification.analysis_mode === 'live' ? 'live' : 'simulated');
           break;
         }
         case 'approve_closure': {
@@ -149,4 +150,5 @@ export class CaseService {
 }
 
 // Demo-only composition root. Replace ports here after reviewing teammate PRs.
-export const service = new CaseService(new CaseStore(join(process.cwd(), 'artifacts', 'thermaldesk-demo')));
+const directory = join(process.cwd(), 'artifacts', 'thermaldesk-demo');
+export const service = new CaseService(new CaseStore(directory), createAnalysisPorts(directory, process.env.THERMALDESK_ANALYSIS_MODE === 'crusoe' ? 'crusoe' : 'fixture'));
