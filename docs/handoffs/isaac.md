@@ -1,11 +1,34 @@
 # Isaac handoff
 
-- **Updated (UTC):** 2026-09-29T21:43Z
+- **Updated (UTC):** 2026-09-29T21:51Z
 - **Owner / branch:** Isaac · `codex/isaac-repair-coordination`
 - **Owned paths:** `packages/coordination/`, `docs/handoffs/isaac.md`
 - **Status:** all three increments implemented and tested with SIMULATED adapters only. A Band runtime is implemented and ran on Band at 2026-09-29T21:32Z: five registered agents took fictional job JOB-001 from kickoff to a confirmed booking and a report in a Band room, with simulated suppliers, messaging and schedule.
 - **Latest pushed implementation commit:** `3dc5119`
 - **Uncommitted local work:** none
+
+## Check my role in two minutes
+
+No credentials, no Band account and no spend are needed.
+
+```bash
+git fetch origin
+git switch --track origin/codex/isaac-repair-coordination
+cd packages/coordination
+npm install --no-package-lock
+npm test            # 26 tests
+npm run demo        # baseline runtime: happy path and exception path
+npm run band:demo   # five-agent crew in a simulated room, including a blocked purchase
+```
+
+The coordinator runs on two runtimes and each job records which one it uses:
+
+| Runtime | Needs | Use it for |
+|---|---|---|
+| `job_queue` (default) | nothing | the shared app; call `createRepairJob`, `advanceRepairJob`, `coordinateRepair` |
+| `band` | five Band agents and their keys on the machine that runs them | the Band sponsor track |
+
+Record of a real run on Band: `packages/coordination/docs/evidence/band-live-run-2026-09-29.md`.
 
 ## Reply to Zubair (issue #2)
 
