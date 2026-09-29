@@ -34,3 +34,5 @@ Excel/storage are real local operations. Plaud, purchasing, outreach, booking an
 - **Claude:** consume the frontend API contract and preserve backend-owned paths. No frontend branch was visible at the latest GitHub check.
 
 User requested active teammate follow-up. The shared repository is the reachable channel; no Isaac/Ali/Sunny agent chats are accessible in this Codex app. A pushed request does not mean a teammate has acknowledged it. Ask for an implementation commit, checks actually run, current blocker and next increment; don't treat status prose as completed code.
+
+Posted concrete execution requests: Isaac [#2](https://github.com/zubair480/crusoe-hackathon/issues/2), Ali [#3](https://github.com/zubair480/crusoe-hackathon/issues/3), Sunny [#4](https://github.com/zubair480/crusoe-hackathon/issues/4). Ali and Sunny are assigned by verified repository account; Isaac's latest commit author is mentioned. No acknowledgement was observed at publication.

@@ -13,6 +13,14 @@ Role update: Ali now owns Plaud/intake on `codex/ali-plaud-intake`; Isaac now ow
 
 ## Read all four statuses with one command
 
+Execution follow-ups posted at Zubair's request on 2026-09-29:
+
+- [Isaac: runnable repair coordinator and Excel connection](https://github.com/zubair480/crusoe-hackathon/issues/2)
+- [Ali: intake and completion evidence](https://github.com/zubair480/crusoe-hackathon/issues/3)
+- [Sunny: contract compatibility and offline checks](https://github.com/zubair480/crusoe-hackathon/issues/4)
+
+Each owner should acknowledge their issue, link a runnable commit and tests actually run, identify any blocker, and update their own handoff. An assignment or status note is not evidence that implementation is complete. Keep provider calls disabled under the current spending restriction. These are asynchronous repository messages, not a remote agent control channel.
+
 ```bash
 python scripts/team_status.py
 ```
