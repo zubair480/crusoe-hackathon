@@ -3,20 +3,20 @@
 ## One product, four independent components
 
 ```text
-Isaac: inspection inputs + Plaud transcript
+Ali: inspection inputs + Plaud transcript
     -> Sunny: checks + Crusoe draft recommendation
     -> Zubair: evidence/recommendation review screen
-    -> Ali: approved repair job + parts + technicians + follow-up
+    -> Isaac: approved repair job + parts + technicians + follow-up
     -> Zubair: confirmed schedule -> Excel write/read-back
-    -> Ali: manager notification with accurate action status
-    -> Isaac: completion photos, receipts, technician comments
+    -> Isaac: manager notification with accurate action status
+    -> Ali: completion photos, receipts, technician comments
     -> Sunny: completion comparison and missing-evidence flags
     -> Zubair: human verification screen
-    -> Ali: close approved job
+    -> Isaac: close approved job
     -> Zubair: final Excel status + report
 ```
 
-The ownership above is the shared source of truth. Outgoing calls/messages belong to Ali; recording/transcription belongs to Isaac. Do not expect Plaud to be the telephone provider.
+The ownership above is the shared source of truth. Outgoing calls/messages belong to Isaac; recording/transcription belongs to Ali. Do not expect Plaud to be the telephone provider.
 
 ## Shared language and layout
 
@@ -30,13 +30,13 @@ Each package may have richer internal types. Its public interface must accept/re
 
 | Owner | Operation | Input -> output |
 |---|---|---|
-| Isaac | `createInspectionPackage` | uploaded files, asset/site IDs, available notes/transcript -> InspectionPackage |
-| Isaac | `collectCompletionEvidence` | job ID, files, receipts, technician comments -> CompletionEvidence |
+| Ali | `createInspectionPackage` | uploaded files, asset/site IDs, available notes/transcript -> InspectionPackage |
+| Ali | `collectCompletionEvidence` | job ID, files, receipts, technician comments -> CompletionEvidence |
 | Sunny | `analyzeInspection` | InspectionPackage -> draft Recommendation |
 | Sunny | `compareCompletion` | RepairJob + approved Recommendation + CompletionEvidence -> VerificationDraft |
-| Ali | `createRepairJob` | approved Recommendation + configured authority -> RepairJob |
-| Ali | `advanceRepairJob` | RepairJob ID + typed workflow event -> persisted RepairJob |
-| Ali | `coordinateRepair` | RepairJob ID + configured supplier, technician, communication, and scheduling adapters -> RepairJob |
+| Isaac | `createRepairJob` | approved Recommendation + configured authority -> RepairJob |
+| Isaac | `advanceRepairJob` | RepairJob ID + typed workflow event -> persisted RepairJob |
+| Isaac | `coordinateRepair` | RepairJob ID + configured supplier, technician, communication, and scheduling adapters -> RepairJob |
 | Zubair | `syncSchedule` | job ID + confirmed booking or verified closure event -> ActionReceipt |
 | Zubair | `exportReport` | current case, Recommendation, RepairJob, CompletionEvidence, VerificationDraft -> downloadable report reference |
 
@@ -51,7 +51,7 @@ Zubair implements thin web API routes calling these functions. A module can init
 - An external action receipt has an idempotency key, mode, status, and evidence/reference. `requested`, `pending`, `confirmed`, `failed`, and `not_configured` are distinct. In a real purchase, a submitted request and an accepted supplier order can be different events.
 - Match the approved part specification. Do not invent wire sizes or approve substitutes. Ask for a scope revision where needed.
 - A cancelled technician booking or late part triggers follow-up/replanning. Keep the prior events in the history.
-- CompletionEvidence does not itself close a job. Sunny's VerificationDraft describes checks and missing evidence. A qualified review decides closure. Zubair records that decision; Ali enforces it.
+- CompletionEvidence does not itself close a job. Sunny's VerificationDraft describes checks and missing evidence. A qualified review decides closure. Zubair records that decision; Isaac enforces it.
 - Keep unresolved findings explicit. A final report may describe an incomplete job; it must not falsely mark it fixed.
 
 ## Excel contract
@@ -60,7 +60,7 @@ The first demo uses one agreed `.xlsx` schedule. Use columns `job_id`, `asset_id
 
 `job_id` is the stable row key; row number is not an identity. Zubair must update the correct row, preserve other jobs/formulas, reread the workbook, and return an ActionReceipt with the result. Serialize writes or detect conflicting edits. Do not claim a local downloadable workbook is a live Microsoft 365 sync. If a hosted workbook is used later, document the actual connector and permissions.
 
-The database/job store is the canonical execution state. Import meaningful manual workbook changes through an explicit reconciliation operation rather than overwriting them without checking. Ali receives failed sync results and prevents inaccurate manager updates.
+The database/job store is the canonical execution state. Import meaningful manual workbook changes through an explicit reconciliation operation rather than overwriting them without checking. Isaac receives failed sync results and prevents inaccurate manager updates.
 
 ## Shared fixtures and first end-to-end run
 
@@ -86,7 +86,7 @@ All four working branches start from the same planning/contract commit. Each per
 
 1. Zubair establishes the root workspace without changing contract semantics; merge that foundation early.
 2. Merge ready feature PRs into `main` after their package checks pass. The contract permits intake and analysis to arrive independently.
-3. Ali and Zubair integrate workflow events, approval gates, and the Excel adapter.
+3. Isaac and Zubair integrate workflow events, approval gates, and the Excel adapter.
 4. Run both entire pipelines against the shared fixture. Exercise cancellation/retry and wrong-asset completion paths.
 5. Fix integration issues on the responsible owner's branch or a clearly coordinated integration change. Do not use force pushes to combine work.
 

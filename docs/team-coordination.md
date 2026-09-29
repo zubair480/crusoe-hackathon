@@ -2,11 +2,13 @@
 
 This GitHub repository is the shared workspace. Code lives on four owner branches; each branch has its owner's current handoff. Read the live links below, not the initial placeholder files on main.
 
+Role update: Ali now owns Plaud/intake on `codex/ali-plaud-intake`; Isaac now owns repair coordination on `codex/isaac-repair-coordination`. The earlier branches `codex/isaac-plaud-intake` and `codex/ali-repair-coordination` are superseded and retained to preserve any existing work. If you started there, preserve your work, fetch origin, and use the new branch for your current assignment. Coordinate transfer of any existing component work with its new owner.
+
 | Owner | Latest status on their branch | Scope |
 |---|---|---|
-| Isaac | [Live handoff](https://github.com/zubair480/crusoe-hackathon/blob/codex/isaac-plaud-intake/docs/handoffs/isaac.md) | Plaud and evidence intake |
+| Ali | [Live handoff](https://github.com/zubair480/crusoe-hackathon/blob/codex/ali-plaud-intake/docs/handoffs/ali.md) | Plaud and evidence intake |
 | Sunny | [Live handoff](https://github.com/zubair480/crusoe-hackathon/blob/codex/sunny-crusoe-analysis/docs/handoffs/sunny.md) | Crusoe and comparison |
-| Ali | [Live handoff](https://github.com/zubair480/crusoe-hackathon/blob/codex/ali-repair-coordination/docs/handoffs/ali.md) | Repair execution and follow-up |
+| Isaac | [Live handoff](https://github.com/zubair480/crusoe-hackathon/blob/codex/isaac-repair-coordination/docs/handoffs/isaac.md) | Repair execution and follow-up |
 | Zubair | [Live handoff](https://github.com/zubair480/crusoe-hackathon/blob/codex/zubair-app-integration/docs/handoffs/zubair.md) | App, Excel, reports and integration |
 
 ## Read all four statuses with one command
@@ -23,16 +25,16 @@ Read all four statuses at startup and before an integration change. Update your 
 
 Include UTC update time, current task, latest pushed implementation commit, exported function signatures, owned paths, completed checks, actual integration modes, blockers, next step, and requests addressed to a named teammate. Report uncommitted work as uncommitted. Never describe a local-only change as available to others.
 
-Commit coherent code separately, then publish your status. The following example is for Isaac; substitute your name and exact branch. First inspect `git status` and `git diff --cached`. If anything is already staged, preserve it and complete or coordinate that work before making a status-only commit; do not silently include or unstage another task's files.
+Commit coherent code separately, then publish your status. The following example is for Ali; substitute your name and exact branch. First inspect `git status` and `git diff --cached`. If anything is already staged, preserve it and complete or coordinate that work before making a status-only commit; do not silently include or unstage another task's files.
 
 ```bash
 git branch --show-current
 git status --short
 git diff --cached --stat
-git add -- docs/handoffs/isaac.md
+git add -- docs/handoffs/ali.md
 git diff --cached
-git commit -m "Update Isaac integration handoff"
-git push origin HEAD:refs/heads/codex/isaac-plaud-intake
+git commit -m "Update Ali integration handoff"
+git push origin HEAD:refs/heads/codex/ali-plaud-intake
 ```
 
 Verify the current branch matches your owner branch before committing or pushing. If there is no changed status, do not create an empty commit. If a push is rejected, fetch and inspect the divergence; merge your remote branch when appropriate and rerun checks. Never force-push to resolve a collision. Each person uses their own clone.

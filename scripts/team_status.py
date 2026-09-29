@@ -4,9 +4,9 @@ import subprocess
 import sys
 
 OWNERS = {
-    "isaac": "codex/isaac-plaud-intake",
+    "ali": "codex/ali-plaud-intake",
     "sunny": "codex/sunny-crusoe-analysis",
-    "ali": "codex/ali-repair-coordination",
+    "isaac": "codex/isaac-repair-coordination",
     "zubair": "codex/zubair-app-integration",
 }
 

@@ -1,5 +1,5 @@
 # Isaac handoff
 
-Status: not implemented. Owner: Isaac. Branch: `codex/isaac-plaud-intake`.
+Status: not implemented. Owner: Isaac. Branch: `codex/isaac-repair-coordination`.
 
-Update with exported operations, setup/env variable names, example inputs/outputs, checks performed, integration modes, and remaining issues.
+Update with exported operations/events, persistence setup, adapter requirements, checks performed, integration modes, and remaining issues.

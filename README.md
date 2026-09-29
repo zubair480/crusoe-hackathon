@@ -17,9 +17,9 @@ Unresolved findings stay open. Repair results feed the equipment history for the
 | Person | Working branch | Responsibility | Prompt to give your coding assistant |
 |---|---|---|---|
 | Zubair | `codex/zubair-app-integration` | Application, review screens, Excel, report, final integration | [Zubair prompt](docs/prompts/zubair.md) |
-| Ali | `codex/ali-repair-coordination` | Repair workflow, parts, technician contact/booking, manager notifications, follow-up; BAND if used | [Ali prompt](docs/prompts/ali.md) |
+| Isaac | `codex/isaac-repair-coordination` | Repair workflow, parts, technician contact/booking, manager notifications, follow-up; BAND if used | [Isaac prompt](docs/prompts/isaac.md) |
 | Sunny | `codex/sunny-crusoe-analysis` | Crusoe, input checks, draft findings and repair recommendations, completion comparison | [Sunny prompt](docs/prompts/sunny.md) |
-| Isaac | `codex/isaac-plaud-intake` | Plaud, original inspection evidence, completion photos and technician comments | [Isaac prompt](docs/prompts/isaac.md) |
+| Ali | `codex/ali-plaud-intake` | Plaud, original inspection evidence, completion photos and technician comments | [Ali prompt](docs/prompts/ali.md) |
 
 Start with [the product scope](docs/product-scope.md), [AGENTS.md](AGENTS.md), [the shared contract](contracts/v1.schema.json), and [the integration guide](docs/integration.md). Then paste your entire role prompt into your coding assistant. Your prompt instructs it to implement your component, not simply discuss a plan. The product name and customer positioning remain a working proposal; no business validation or completed application is claimed.
 
@@ -40,12 +40,12 @@ Run the command for your name:
 ```bash
 # Zubair
 git switch --track origin/codex/zubair-app-integration
-# Ali
-git switch --track origin/codex/ali-repair-coordination
+# Isaac
+git switch --track origin/codex/isaac-repair-coordination
 # Sunny
 git switch --track origin/codex/sunny-crusoe-analysis
-# Isaac
-git switch --track origin/codex/isaac-plaud-intake
+# Ali
+git switch --track origin/codex/ali-plaud-intake
 ```
 
 Use `git switch <your-branch>` instead if your local branch already exists.
@@ -69,7 +69,7 @@ See [integration and branch rules](docs/integration.md) for the shared interface
 ## Deliberate scope
 
 - TypeScript is the shared application language. Zubair establishes the Next.js web application and root workspace. Feature packages export callable functions and do not create separate frontends.
-- Crusoe is the chosen inference provider. Plaud is Isaac's input integration. Outbound calling is a separate integration owned by Ali.
+- Crusoe is the chosen inference provider. Plaud is Ali's input integration. Outbound calling is a separate integration owned by Isaac.
 - BAND is optional for the basic application; if included for its sponsor award, it must actually carry coordination. Neo4j is deferred from the first build.
 - Qualified people approve technical recommendations and final verification. AI-generated drafts do not authorize repairs or certify electrical safety.
 - Start with one agreed input/export format, one case, one schedule workbook, and one report. Do not silently remove either pipeline to reduce scope.

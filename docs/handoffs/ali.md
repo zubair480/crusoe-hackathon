@@ -1,5 +1,5 @@
 # Ali handoff
 
-Status: not implemented. Owner: Ali. Branch: `codex/ali-repair-coordination`.
+Status: not implemented. Owner: Ali. Branch: `codex/ali-plaud-intake`.
 
-Update with exported operations/events, persistence setup, adapter requirements, checks performed, integration modes, and remaining issues.
+Update with exported operations, setup/env variable names, example inputs/outputs, checks performed, integration modes, and remaining issues.

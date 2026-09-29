@@ -12,11 +12,11 @@ Own the shared application, review gates, Excel adapter, final report, and integ
 2. Build one case screen covering original evidence, draft findings, missing information, recommendation approval, parts, technician/appointment, execution history, completion evidence, verification, and report export. Keep it usable by a facilities manager; show business status instead of infrastructure jargon.
 3. Provide thin server routes that call the agreed package operations. Use dependency-injected fixture adapters while a teammate's package is unavailable, visibly marked simulated. Do not build competing intake, model, or coordination implementations.
 4. Make recommendation approval and final verification separate. Record reviewer identity, timestamp, and the reviewed version. Changing the scope invalidates the corresponding prior approval. A synthetic reviewer record is marked demo data.
-5. Implement `syncSchedule` in `packages/excel`. Work with an actual `.xlsx` file for the demo. Match rows by job_id, preserve unrelated content/formulas, detect or serialize conflicting writes, and reread the result before confirming success. Return an ActionReceipt to Ali. Clearly distinguish this file-based demo from live Microsoft 365 sync.
-6. Handle schedule changes and closure updates through the same adapter. Surface failures rather than displaying invented success. Reconcile manual workbook edits explicitly with Ali's canonical job state.
+5. Implement `syncSchedule` in `packages/excel`. Work with an actual `.xlsx` file for the demo. Match rows by job_id, preserve unrelated content/formulas, detect or serialize conflicting writes, and reread the result before confirming success. Return an ActionReceipt to Isaac. Clearly distinguish this file-based demo from live Microsoft 365 sync.
+6. Handle schedule changes and closure updates through the same adapter. Surface failures rather than displaying invented success. Reconcile manual workbook edits explicitly with Isaac's canonical job state.
 7. Implement `exportReport`. Include the original finding/evidence, approved scope, parts and purchasing status, technician, appointment, actual completion details, comments, receipts/photos, reviewer decision, remaining open issues, and which actions were simulated. Do not claim a repair succeeded merely because a report can be downloaded.
 8. Provide a seeded demo with the shared fixtures and a reset that affects only demo records. No private customer files or secrets belong in the repository.
-9. Assemble Isaac's intake, Sunny's Crusoe analysis, and Ali's coordinator once their PRs are ready. Preserve the full inspection pipeline and full execution pipeline.
+9. Assemble Ali's intake, Sunny's Crusoe analysis, and Isaac's coordinator once their PRs are ready. Preserve the full inspection pipeline and full execution pipeline.
 
 ## Acceptance checks
 

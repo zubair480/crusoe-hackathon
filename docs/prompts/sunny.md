@@ -17,7 +17,7 @@ Own input checks, Crusoe inference, draft findings/recommendations, and comparis
 7. Record provider/model identifiers, request references when available, latency, and usage metadata. Keep credentials and sensitive content out of routine logs.
 8. Handle malformed output, timeouts, rate limits, and absent credentials. A deterministic fixture adapter may unblock integration but must be labeled simulated.
 
-Isaac supplies evidence. Zubair supplies review screens. Ali acts on the reviewed version and manages the repair. Do not replace either entire pipeline with a standalone model demo.
+Ali supplies evidence. Zubair supplies review screens. Isaac acts on the reviewed version and manages the repair. Do not replace either entire pipeline with a standalone model demo.
 
 ## Acceptance checks
 

@@ -22,9 +22,9 @@ Run `python scripts/team_status.py` at startup to read everyone's latest pushed 
 | Owner | Branch | Owned paths |
 |---|---|---|
 | Zubair | `codex/zubair-app-integration` | `apps/web/`, `packages/excel/`, root workspace configuration, `contracts/`, `docs/integration.md`, `docs/handoffs/zubair.md` |
-| Ali | `codex/ali-repair-coordination` | `packages/coordination/`, `docs/handoffs/ali.md` |
+| Isaac | `codex/isaac-repair-coordination` | `packages/coordination/`, `docs/handoffs/isaac.md` |
 | Sunny | `codex/sunny-crusoe-analysis` | `packages/analysis/`, `docs/handoffs/sunny.md` |
-| Isaac | `codex/isaac-plaud-intake` | `packages/intake/`, `docs/handoffs/isaac.md` |
+| Ali | `codex/ali-plaud-intake` | `packages/intake/`, `docs/handoffs/ali.md` |
 
 Shared contract changes are coordinated through Zubair. Propose the change in your handoff rather than silently changing another component's assumptions. Add tests inside your owned package. Put your environment variable names and examples in your package's `.env.example` and README; never commit real values. Zubair owns the shared lockfile.
 
@@ -33,7 +33,7 @@ Shared contract changes are coordinated through Zubair. Propose the change in yo
 - Use TypeScript for shared application modules. Zubair owns the Next.js application. Export callable package functions; do not create competing dashboards or standalone applications.
 - Import and emit the shared contract. Generate TypeScript types from the JSON Schema or maintain a clearly mapped adapter; do not create incompatible copies of the business objects.
 - Inject external adapters so a component can run against deterministic fixtures before credentials exist.
-- Ali owns job state transitions, persisted execution events, and the repair job's canonical state. The web app calls this service. Other packages return evidence, drafts, or action results.
+- Isaac owns job state transitions, persisted execution events, and the repair job's canonical state. The web app calls this service. Other packages return evidence, drafts, or action results.
 - Zubair owns Excel reads/writes and the schedule view. Publishing a scheduling event does not prove the workbook changed; wait for the adapter result.
 - Persist job identifiers and idempotency keys for external actions. A retry must not create a second order, booking, or notification.
 - Use source references and preserve original evidence. Measurements and arithmetic are deterministic inputs, not values invented by a model.
