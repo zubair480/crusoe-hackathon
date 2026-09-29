@@ -4,6 +4,7 @@ import inspectionFixture from '../../../fixtures/inspection.json';
 import scopeFixture from '../../../fixtures/approved-recommendation.json';
 import completionFixture from '../../../fixtures/completion-wrong-asset.json';
 import type { TeamPorts, Recommendation, RepairJob, ActionReceipt, InspectionPackage, CompletionEvidence } from './model';
+import { collectCompletionEvidence as collectIntakeCompletion } from '@thermaldesk/intake';
 
 export const initialInspection = () => structuredClone(inspectionFixture.data) as InspectionPackage;
 export const reviewableDemoScope = (): Recommendation => ({
@@ -51,20 +52,27 @@ export const demoPorts: TeamPorts = {
   async closeRepair(job, review) { return { ...job, status: 'closed', closure_review: review, unresolved_findings: [], state_version: job.state_version + 1, updated_at: now() }; },
   async collectCompletionEvidence(job, scenario, version) {
     const completion = structuredClone(completionFixture.data) as CompletionEvidence;
-    completion.version = version;
-    completion.job_id = job.job_id;
-    completion.technician_id = job.booking?.technician_id ?? 'DEMO-TECH';
-    completion.created_at = now();
+    let reportedStatus: CompletionEvidence['reported_status'] = completion.reported_status;
+    let comments = completion.comments;
+    let evidenceAsset = completion.evidence[0].asset_id;
+    let unresolvedItems = completion.unresolved_items;
     if (scenario !== 'wrong_asset') {
-      completion.evidence[0].asset_id = job.asset_id;
-      completion.evidence[0].uri = 'demo://completion-statement';
-      completion.reported_status = scenario === 'complete' ? 'complete' : 'incomplete';
-      completion.comments = scenario === 'complete' ? 'Fictional technician reports the training prop replaced on DEMO-A. Demo evidence only.' : 'The part has not arrived; no repair was completed.';
-      completion.evidence[0].text = completion.comments;
-      completion.evidence[0].segments = [{ id: `DEMO-SEG-${version}`, text: completion.comments }];
-      completion.unresolved_items = scenario === 'complete' ? [] : ['Repair has not been performed.'];
+      evidenceAsset = job.asset_id;
+      reportedStatus = scenario === 'complete' ? 'complete' : 'incomplete';
+      comments = scenario === 'complete' ? 'Fictional technician reports the training prop replaced on DEMO-A. Demo evidence only.' : 'The part has not arrived; no repair was completed.';
+      unresolvedItems = scenario === 'complete' ? [] : ['Repair has not been performed.'];
     }
-    return completion;
+    return collectIntakeCompletion({
+      case_id: job.case_id, site_id: job.site_id, asset_id: job.asset_id,
+      completion_id: completion.completion_id, job_id: job.job_id, version,
+      technician_id: job.booking?.technician_id ?? 'DEMO-TECH', reported_status: reportedStatus,
+      comments, unresolved_items: unresolvedItems, created_at: now(),
+      transcript: {
+        text: comments, uri: scenario === 'wrong_asset' ? completion.evidence[0].uri : 'demo://completion-statement',
+        source: 'synthetic', mode: 'simulated', asset_id: evidenceAsset, captured_at: now(),
+        segments: [{ id: `DEMO-SEG-${version}`, text: comments }],
+      },
+    });
   },
   async compareCompletion(job, recommendation, completion) {
     const sameAsset = completion.asset_id === job.asset_id && completion.evidence.every(e => e.asset_id === job.asset_id);

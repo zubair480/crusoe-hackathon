@@ -14,6 +14,7 @@
     "@thermaldesk/coordination": "0.1.0",
     "@thermaldesk/contracts": "0.1.0",
     "@thermaldesk/excel": "0.1.0",
+    "@thermaldesk/intake": "0.1.0",
     "lucide-react": "^1.48.0",
     "next": "^16.3.7",
     "react": "^19.3.0",

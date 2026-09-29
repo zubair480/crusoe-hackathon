@@ -1,7 +1,7 @@
 export type * from './generated';
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
-import schema from './v1.schema.json';
+import schema from './v1.schema.json' with { type: 'json' };
 
 const ajv = new Ajv2020({ allErrors: true, strict: false });
 addFormats(ajv);
