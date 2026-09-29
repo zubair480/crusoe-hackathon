@@ -206,7 +206,8 @@ Notes from the live run:
   `PartsSourcer` leaves once the parts are ordered and `ScheduleReporter` takes its seat.
 - Agents rejoin the rooms they belong to after a restart (`autoSubscribeExistingRooms`).
 - `BAND_DEBUG=1 npm run band` prints what the SDK does.
-- To run the demo again, stop the crew, delete `.data/band/JOB-001.json` and use a new room.
+- To run the demo again: stop the crew, `npm run band:reset`, `npm run band`, and use a new
+  room.
 
 `createCrewHandler(role, deps)` returns the handler of one agent, and
 `startBandCrew(options)` connects all five. The critic's extra rules are set with
