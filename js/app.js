@@ -367,8 +367,18 @@ async function backendAnalyze(file, ctx) {
   await upload(noteFile, st.revision); st = await get();
   const ev = [...st.inspection.evidence].reverse().find((e) => e.source === "upload" && e.kind === "thermal_image");
   if (!ev) throw new Error("The backend did not record the image.");
+  // Plaud: attach the newest voice note that mentions this case's asset (others are never sent)
+  let voice = null;
+  try {
+    const pl = await (await fetch(API + "/api/plaud", { cache: "no-store" })).json();
+    const asset = st.inspection.asset_id, hit = (pl.recordings || []).find((r) => (r.asset_mentions || []).includes(asset));
+    if (hit) {
+      const r = await fetch(API + "/api/plaud", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ recording_id: hit.id, expectedRevision: st.revision }) });
+      if (r.ok) { st = await r.json(); voice = hit; }
+    }
+  } catch { /* Plaud optional */ }
   st = await post({ command: "analyze", expectedRevision: st.revision });
-  return { rec: st.recommendation, ev, note };
+  return { rec: st.recommendation, ev, note, voice };
 }
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
 function renderBackend(res, err) {
@@ -378,6 +388,7 @@ function renderBackend(res, err) {
   el.innerHTML = `<b>${esc(r.recommendation_id)}</b> · ${esc(r.status.replace("_", " "))} · mode <b>${esc(r.analysis_mode)}</b>
     ${res.note ? `<div class="f">${esc(res.note)}</div>` : ""}
     <div class="f">Evidence ${esc(res.ev.id)} · ${esc(res.ev.kind)}</div>
+    ${res.voice ? `<div class="f"><span class="sev ok">PLAUD · LIVE</span> Voice note ${esc(new Date(res.voice.start_at).toLocaleString())}: “${esc(res.voice.text.replace(/^Speaker \d+:\s*/, "").slice(0, 160))}”</div>` : `<div class="f">No Plaud voice note mentions this asset.</div>`}
     ${(r.findings || []).map((f) => `<div class="f"><span class="sev ${sevMap[f.severity] || "ok"}">${esc(f.severity.toUpperCase())}</span> ${esc(f.description)}${f.uncertainties?.length ? `<br><i>${esc(f.uncertainties.join(" · "))}</i>` : ""}</div>`).join("")}
     ${r.repair_scope ? `<div class="f"><b>Scope:</b> ${esc(r.repair_scope)}</div>` : ""}
     ${r.missing_information?.length ? `<div class="f"><b>Needs:</b> ${esc(r.missing_information.join(" · "))}</div>` : ""}
@@ -401,7 +412,7 @@ async function analyzeUpload(file) {
   dev.mode = "shot"; devEl.classList.remove("fire"); void devEl.offsetWidth; devEl.classList.add("fire");
   $("ir-shot").getContext("2d").drawImage(dev.cv, 0, 0); $("ir-thumb").getContext("2d").drawImage(dev.cv, 0, 0, 160, 120);
   fillReport(b); fillUpload(b, px, file);
-  $("r-ai").innerHTML = `<span class="spin"></span>Uploading to ${esc(API)} · Crusoe vision model analyzing the image (up to 45 s)…`;
+  $("r-ai").innerHTML = `<span class="spin"></span>Uploading to ${esc(API)} · attaching Plaud voice note · Crusoe vision model analyzing (up to 45 s)…`;
   setTimeout(() => { if (dev.b === b) document.body.classList.remove("aim"); }, 650);
   setTimeout(() => { if (dev.b === b) scrollReport(); }, 3200);
   const out = await backend; if (dev.b !== b) return;
