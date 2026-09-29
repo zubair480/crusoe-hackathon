@@ -1,33 +1,36 @@
 # Zubair handoff
 
-Status: backend increment implemented; 3D frontend belongs to Claude. Owner: Zubair. Branch: `codex/zubair-app-integration`.
+Updated: 2026-09-29 20:33 UTC. Owner: Zubair. Branch: `codex/zubair-app-integration`. Latest pushed implementation: `654957b`. PR: https://github.com/zubair480/crusoe-hackathon/pull/1.
 
-Updated: 2026-09-29 20:21 UTC. Last pushed base implementation: `3943b09`; this handoff's commit includes HTTP verification, reconciliation and Sunny's reviewed analysis increment `b4c38ca`. PR: https://github.com/zubair480/crusoe-hackathon/pull/1. No production deployment is claimed.
+Status: available backend modules integrated; missing teammate implementations remain explicit. No production deployment or completed frontend is claimed. Claude owns the 3D frontend.
 
 ## Available now
 
-- npm TypeScript/Next.js workspace and generated schema types in `@thermaldesk/contracts`.
-- Persistent local case API with versioned approvals, stale-write checks, initial evidence uploads, fixture-driven execution, cancellation/rebooking, completion checks and human demo closure.
-- Actual Excel write/read-back through `syncSchedule(input: ScheduleInput): Promise<ActionReceipt>` and `readSchedule(path: string): Promise<ScheduleSnapshot>` in `@thermaldesk/excel`.
-- `exportReport(state: CaseState): string` produces an escaped, printable HTML report. GET `/api/report` downloads it; GET `/api/schedule` downloads the actual workbook.
-- GET/POST `/api/case`, POST `/api/evidence`, GET `/api/evidence/:id`, GET `/api/health`.
+- Next.js/TypeScript workspace, generated v1 types, persistent case API, evidence storage, versioned approval/closure gates, cancellation/rebooking, manual-workbook reconciliation and printable HTML report.
+- Sunny's module through `f6305f9`, including the wrapped-JSON parser change, is integrated through `apps/web/lib/analysis-ports.ts`.
+- `syncSchedule(input: ScheduleInput): Promise<ActionReceipt>` and `readSchedule(path: string): Promise<ScheduleSnapshot>` perform actual local Excel write/read-back.
+- `createScheduleAdapter({workbookPath, getExpectedFingerprint, onConfirmed})` exports the scheduling port Isaac requested. It checks the proposed row against the canonical job, retains idempotency, and doesn't advance the persisted fingerprint on failed writes. Read `packages/excel/README.md` for callback/transaction ownership.
+- `exportReport(state: CaseState): string`; routes GET/POST `/api/case`, POST `/api/evidence`, GET `/api/evidence/:id`, GET `/api/health`, GET `/api/schedule`, GET `/api/report`.
 
-Exact payloads and the 3D frontend sequence: `docs/frontend-handoff.md`. Ports: `apps/web/lib/model.ts`. Composition root: `apps/web/lib/service.ts`.
+Exact frontend payloads: `docs/frontend-handoff.md`. App ports: `apps/web/lib/model.ts`. Composition root: `apps/web/lib/service.ts`.
 
-## Checks and modes
+## Cost controls and verification
 
-`npm test`: 16 tests passed (12 app/Excel, 4 analysis). `npm run typecheck`: passed. Production build: passed including the integrated analysis module, reconciliation and all routes.
+Current instruction is to integrate without spending. Keep `THERMALDESK_ANALYSIS_MODE=fixture` and `CRUSOE_LIVE_REQUESTS_ENABLED=false`. The local key is ignored by Git and is never shared. The app's provider fetch guard blocks network inference unless the live flag is explicitly enabled; credentials alone are insufficient. Do not run Sunny's separate image runner or enable paid tests without new user authorization. The local HTTP smoke script refuses non-simulated external integrations before any mutation.
 
-`node apps/web/scripts/smoke.mjs --reset-demo`: passed against http://127.0.0.1:3001 including Sunny's integrated module. Exercised upload/download, approval blocks, actual workbook, manager-update gating, cancellation/rebooking without duplicate purchase, wrong-asset and incomplete closure rejection, passing human demo review, report download and cross-origin rejection. Final demo case revision 31, closed; workbook download was 8,549 bytes and report 9,606 bytes in that run. Use `--reset-demo` only when deliberately resetting this synthetic case for another demonstration.
+`npm test`: 20 tests passed (15 app/Excel/request-policy, 5 analysis). `npm run typecheck`: passed. `npm run build`: passed. These checks use fixtures/mocks and local workbook files; no paid provider calls were made for this increment. Secret scan found no configured key in tracked files.
 
-Manual workbook changes cause a failed sync; explicit reviewed reconciliation uses the current workbook fingerprint and preserves unrelated rows. No automatic import of manual technician changes into the coordinator is claimed.
+The earlier local HTTP fixture run passed upload/download, approval blocks, workbook updates, cancellation/rebooking without duplicate orders, wrong-asset and incomplete closure rejection, human demo review, report export and origin rejection. Final revision 31, closed. It was not repeated unnecessarily.
 
-Excel and local file storage are real. Sunny's analysis and comparison module is integrated; its Crusoe provider is available but not configured with a key here. Fixture analysis remains the default. Plaud, supplier transactions, outreach, bookings and manager messages use simulated adapters. No live model request, external message, purchase or actual professional approval occurred.
+One bounded text-only Crusoe request occurred before the no-spend instruction: HTTP 200, followed by failed response-format validation. No valid inference or image diagnosis is claimed. The parser fix has been checked offline only. No supplier purchase, technician call, or manager message occurred.
 
-## Requests and next work
+Excel/storage are real local operations. Plaud, purchasing, outreach, booking and manager messages remain simulated. This is a local demonstration without production authentication or tenancy.
 
-- Claude: own frontend/3D scene; consume the published API. The page/layout/CSS are placeholder scaffold and can be replaced. Preserve backend API and lib paths. No frontend branch was visible on GitHub at the latest check.
-- Ali/Sunny/Isaac: publish usable signatures and real integration status in your own handoff. Replace the corresponding TeamPorts through the composition root; don't rewrite the UI or Excel adapter.
-- Sunny: your module is integrated through `apps/web/lib/analysis-ports.ts`. Operational telemetry is appended to ignored local `analysis-telemetry.jsonl` alongside the case, outside v1 business objects. It stores provider/model/request/latency/usage/error metadata and no key, image or transcript. Your Recommendation input type restricts approval to null even for compareCompletion; please align that type with the shared contract. The integration preserves the real approval at runtime through a narrow type adapter.
-- Missing access for a genuine Crusoe call: configure `apps/web/.env.local` with `THERMALDESK_ANALYSIS_MODE=crusoe`, `CRUSOE_API_KEY`, and an available model. Current fixture lacks an image and correctly stops at validation; upload an authorized JPEG/PNG before requesting image analysis. No live call or diagnostic accuracy is claimed.
-- Claude's frontend and Ali/Isaac modules were not present on published branches at the latest check. Their integration remains outstanding.
+## Named teammate requests
+
+- **Isaac:** your scheduling interface is confirmed and implemented. Import `createScheduleAdapter` from `@thermaldesk/excel`; keep blocked reasons in `getJobDetail` outside v1, as proposed. Persist its snapshot within the existing transaction; do not acquire the same case-store lock again. Publish runnable `createRepairJob`, `advanceRepairJob`, and `coordinateRepair` plus offline tests. Record failed/thrown Excel updates accurately before manager notification. Latest remote `fb8faa0` is status only, so your coordinator is not integrated yet.
+- **Ali:** publish runnable `createInspectionPackage` and `collectCompletionEvidence` with exact inputs and evidence URI/access rules. Retain supplied asset identity, transcript/source references, and original files. Use transcript fixtures/manual imports without calling paid APIs; clearly label genuine Plaud versus synthetic evidence. Latest remote `6645932` contains no intake implementation.
+- **Sunny:** your code through `f6305f9` is integrated. Operational telemetry is appended to ignored `analysis-telemetry.jsonl` outside v1 business objects, with no key/image/transcript bodies. Align the Recommendation approval input type with the shared contract; it currently restricts approval to null even for completion comparison. Add offline request/response tests and guard your separate CLI against accidental paid calls. Do not follow the old handoff's request to run a live demo under the current spending restriction.
+- **Claude:** consume the frontend API contract and preserve backend-owned paths. No frontend branch was visible at the latest GitHub check.
+
+User requested active teammate follow-up. The shared repository is the reachable channel; no Isaac/Ali/Sunny agent chats are accessible in this Codex app. A pushed request does not mean a teammate has acknowledged it. Ask for an implementation commit, checks actually run, current blocker and next increment; don't treat status prose as completed code.
