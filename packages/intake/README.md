@@ -49,6 +49,9 @@ Behaviour:
 npm test --workspace @thermaldesk/intake
 npm run plaud:pull --workspace @thermaldesk/intake
 npm run plaud:pull --workspace @thermaldesk/intake -- --file of_xxx --case DEMO-CASE-001 --site DEMO-SITE --asset DEMO-A
+npm run plaud:watch --workspace @thermaldesk/intake
 ```
 
 `plaud:pull` writes real recording content to `packages/intake/.plaud-pull/` (git-ignored) and prints a summary. With `--case/--site/--asset/--file` it also writes a schema-valid `InspectionPackage`.
+
+`plaud:watch` keeps that ignored cache synchronized every 10 seconds so the web app sees new recordings without a manual pull. Set `PLAUD_WATCH_INTERVAL_MS` to change the interval (minimum 5 seconds).
