@@ -1,5 +1,15 @@
 # Zubair handoff
 
+## Detailed integration README — 2026-09-30 00:11 UTC
+
+Owner: Zubair. Branch: `codex/zubair-app-integration`. Latest pushed documentation implementation: `50898a6`.
+
+- Replaced the outdated root overview with a 577-line README documenting both product pipelines, Crusoe request/validation behavior, Plaud MCP and cached web import, all five Band preparation roles, quote checks, unsent outreach, canonical coordination state, separate review gates, Excel receipts, uploads, reports, setup, APIs, configuration, recorded runs, and outstanding limitations. Added source links, architecture/sequence diagrams, and a machine-readable integration summary for repository-reading AI tools.
+- Interfaces and package dependencies are unchanged. Documented the exact current distinction between live provider transport, deterministic preparation, simulated business actions, and actual local file/workbook operations. Preserved the positioning intent from the pre-existing README edit without publishing the untracked research document. Unrelated product-scope, analysis, and local output changes remain excluded.
+- Verification: 71 Markdown links checked for tracked file targets and valid section anchors; all JSON examples parsed; code fences balanced; credential-pattern scan and `git diff --check` passed. Published raw GitHub README exactly matched the local content (SHA-256 `ca27baed5f5c1192a6efd30efeb81b128513e9f76fdd1a01c889c6aee175a2f3`). No runtime tests were repeated for this documentation-only increment; previous test/provider evidence is explicitly dated and qualified.
+- Actual modes for this increment: local documentation inspection and GitHub publication only. No paid inference, Plaud refresh, Band connection, supplier/technician communication, purchase, or booking. Existing environment files and no-spend development policy are unchanged. PR #7 remains the integration review target; no merge performed.
+- Blockers: none for documentation. **Sunny:** the recorded non-image citation gap remains unresolved. **Claude:** completion-form wiring and production interpretation of demo UI measurements remain as previously documented. **Isaac / Ali:** preserve the documented preparation-only and cached-transcript boundaries when extending adapters; no new dependency request or contract change is introduced by this update.
+
 ## Live Band preparation run — 2026-09-29 23:00 UTC
 
 Owner: Zubair. Branch: `codex/zubair-app-integration`. Latest pushed implementation: `4d03689`.
