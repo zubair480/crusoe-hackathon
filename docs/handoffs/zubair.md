@@ -1,5 +1,15 @@
 # Zubair handoff
 
+## Repository homepage documentation — 2026-09-30 00:36 UTC
+
+Owner: Zubair. Branch: `codex/zubair-app-integration`. Latest pushed documentation implementation: `824aa247bed47812453ad78af9f5b6b232d45ac6` on `codex/readme-integration-guide`, prepared directly from current `main` for [README-only PR #8](https://github.com/zubair480/crusoe-hackathon/pull/8).
+
+- Confirmed the repository default branch is `main`, whose 77-line README still says intake/dispatch have not arrived. PR #7 contains the detailed guide plus pending application changes, so created a separate documentation-only publication path. The new PR contains exactly `README.md`; no application code, dependency, teammate change, or local uncommitted file is included.
+- Corrected homepage portability: all 56 repository file links point to the checked `802e788` implementation snapshot, and the opening identifies the integration branch required by the setup instructions. Both pipelines, actual integration boundaries, recorded verification, and all five Band role responsibilities remain documented.
+- Verification: startup team-status read completed; pinned file targets exist; JSON examples parse; fences balance; credential-pattern scan passed; GitHub branch comparison has exactly one changed file; downloaded GitHub README content equals the prepared 577-line document. No runtime checks were needed for this documentation-only change.
+- Actual modes: GitHub read/write and local documentation validation only. No paid inference, Band/Plaud provider call, external business action, or environment change. Unrelated local changes were preserved. Public interfaces are unchanged.
+- Remaining publication step: coordinated merge of README-only PR #8 into `main`; no merge performed. **Zubair/repository owner:** review that isolated documentation merge. **Isaac / Ali / Sunny / Claude:** no new implementation dependency; existing handoff requests remain unchanged.
+
 ## Detailed integration README — 2026-09-30 00:11 UTC
 
 Owner: Zubair. Branch: `codex/zubair-app-integration`. Latest pushed documentation implementation: `50898a6`.
