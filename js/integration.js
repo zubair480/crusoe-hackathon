@@ -1,6 +1,7 @@
 // ThermalDesk backend bridge. Kept separate from the Three.js scene so visual work can continue.
 const params = new URLSearchParams(location.search);
-const API = params.get("api") || localStorage.getItem("thermaldesk-api") || "http://127.0.0.1:3001";
+const defaultApi = location.port === "8765" ? "http://127.0.0.1:3001" : location.origin;
+const API = params.get("api") || localStorage.getItem("thermaldesk-api") || defaultApi;
 localStorage.setItem("thermaldesk-api", API);
 
 const style = document.createElement("style");

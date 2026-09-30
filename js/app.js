@@ -285,7 +285,7 @@ function captureIR(t) {
 // ---------------------------------------------------------------- upload + analysis
 // The open bucket gets an Upload pin in the 3D scene. An uploaded IR image is analyzed on the device
 // (hotspot from the actual pixels) and sent to the ThermalDesk backend: /api/evidence, then "analyze".
-const API = new URLSearchParams(location.search).get("api") || (() => { try { return localStorage.getItem("thermaldesk-api"); } catch { return null; } })() || "http://127.0.0.1:3001";
+const API = new URLSearchParams(location.search).get("api") || (() => { try { return localStorage.getItem("thermaldesk-api"); } catch { return null; } })() || (location.port === "8765" ? "http://127.0.0.1:3001" : location.origin);
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const fileIn = Object.assign(document.createElement("input"), { type: "file", accept: "image/png,image/jpeg", hidden: true });
 document.body.append(fileIn);
