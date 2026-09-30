@@ -3,20 +3,25 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 const fake = vi.hoisted(() => ({ names: { repair_coordinator: 'RepairCoordinator', parts_sourcer: 'PartsSourcer', authority_critic: 'AuthorityCritic', tech_dispatcher: 'TechDispatcher', schedule_reporter: 'ScheduleReporter' } as Record<string, string>,
-  started: 0, stopped: 0, created: 0, sent: 0, failSend: false, failStart: false,
+  started: 0, stopped: 0, created: 0, sent: 0, failSend: false, failStart: false, admitted: [] as string[],
 }));
 vi.mock('@band-ai/sdk/core', () => ({ NoopLogger: class {} }));
 vi.mock('@band-ai/sdk', () => ({
   loadAgentConfig: (key: string) => ({ agentId: fake.names[key], apiKey: 'PRIVATE-TEST-VALUE' }),
-  BandLink: class { rest; constructor(config: { agentId: string }) { this.rest = { getAgentMe: async () => ({ id: config.agentId, name: config.agentId }) }; } },
+  BandLink: class { rest; constructor(config: { agentId: string }) { this.rest = {
+    getAgentMe: async () => ({ id: config.agentId, name: config.agentId }),
+    createChat: async () => { fake.created++; return { id: 'room-1' }; },
+    addChatParticipant: async () => ({}),
+    createChatMessage: async () => { if (!fake.admitted.includes('ScheduleReporter')) throw new Error('Creator did not hydrate the new room'); fake.sent++; if (fake.failSend) throw new Error('PRIVATE-TEST-VALUE'); return {}; },
+  }; } },
   GenericAdapter: class { constructor(readonly handler: unknown) {} },
-  Agent: { create: () => ({ isRunning: true,
-    start: async () => { fake.started++; if (fake.failStart && fake.started === 2) throw new Error('PRIVATE-TEST-VALUE'); },
+  Agent: { create: ({ config }: { config: { agentId: string } }) => ({ isRunning: true,
+    start: async () => { fake.started++; if (fake.created) fake.admitted.push(config.agentId); if (fake.failStart && fake.started === 2) throw new Error('PRIVATE-TEST-VALUE'); },
     stop: async () => { fake.stopped++; },
-    runtime: { link: { subscribeRoom: async () => {}, rest: {
+    runtime: { link: { rest: {
       createChat: async () => { fake.created++; return { id: 'room-1' }; },
       addChatParticipant: async () => ({}),
-      createChatMessage: async () => { fake.sent++; if (fake.failSend) throw new Error('PRIVATE-TEST-VALUE'); return {}; },
+      createChatMessage: async () => { if (!fake.admitted.includes('ScheduleReporter')) throw new Error('Creator did not hydrate the new room'); fake.sent++; if (fake.failSend) throw new Error('PRIVATE-TEST-VALUE'); return {}; },
     } } },
   }) },
 }));
@@ -25,7 +30,7 @@ import { createCoordinationPorts } from './coordination-ports';
 import { demoPorts, reviewableDemoScope } from './demo-ports';
 let dir: string, gateway: BandGateway, jobId: string;
 beforeEach(async () => {
-  Object.assign(fake, { started: 0, stopped: 0, created: 0, sent: 0, failSend: false, failStart: false });
+  Object.assign(fake, { started: 0, stopped: 0, created: 0, sent: 0, failSend: false, failStart: false, admitted: [] });
   dir = await mkdtemp(join(tmpdir(), 'band-gateway-test-'));
   const ports = createCoordinationPorts(dir, demoPorts);
   const recommendation = reviewableDemoScope(); recommendation.status = 'approved';
@@ -43,6 +48,7 @@ it('persists room and event receipts and does not duplicate confirmed dispatch',
   await gateway.dispatch(jobId, 'kickoff');
   expect(await gateway.dispatch(jobId, 'kickoff')).toMatchObject({ duplicate: true, status: 'confirmed' });
   expect(fake.started).toBe(5); expect(fake.created).toBe(1); expect(fake.sent).toBe(1);
+  expect(fake.admitted).toContain('ScheduleReporter');
 });
 it('retains uncertain send intent and never blindly repeats an external message', async () => {
   fake.failSend = true;
@@ -50,6 +56,12 @@ it('retains uncertain send intent and never blindly repeats an external message'
   expect(await gateway.dispatch(jobId, 'kickoff')).toMatchObject({ duplicate: true, status: 'pending' });
   expect(fake.sent).toBe(1);
   expect(JSON.stringify(await gateway.status())).not.toContain('PRIVATE-TEST-VALUE');
+});
+it('reconnects an already running crew after persisting its first room', async () => {
+  await gateway.start(jobId);
+  await gateway.dispatch(jobId, 'kickoff');
+  expect(fake.stopped).toBe(5); expect(fake.started).toBe(10);
+  expect(fake.admitted).toContain('ScheduleReporter'); expect(fake.sent).toBe(1);
 });
 it('stops partially started agents and redacts provider errors on connection failure', async () => {
   fake.failStart = true;

@@ -1,9 +1,11 @@
 import { advanceRepairJob, selectCoordinationRuntime, type WorkflowEvent } from '@thermaldesk/coordination';
 import { BandGateway } from './band-gateway';
 import { coordination, service } from './service';
+import { RepairPreparation, preparationDispatchKey } from './repair-preparation';
 
-const globals = globalThis as typeof globalThis & { thermaldeskBandGateway?: BandGateway };
-export const band = globals.thermaldeskBandGateway ??= new BandGateway(service.store.directory, coordination);
+export const preparation = new RepairPreparation(service.store);
+const globals = globalThis as typeof globalThis & { thermaldeskAssistedBandGatewayV2?: BandGateway };
+export const band = globals.thermaldeskAssistedBandGatewayV2 ??= new BandGateway(service.store.directory, coordination, undefined, preparation);
 export async function coordinationStatus() {
   const state = await service.read();
   return { revision: state.revision, band: await band.status(),
@@ -45,7 +47,7 @@ export async function coordinationCommand(input: CoordinationInput) {
   if (input.command === 'dispatch_band') {
     const detail = await coordination.getDetail(job.job_id);
     const update = Boolean(job.booking || detail.offers.some(offer => offer.status === 'accepted') || ['closed', 'cancelled'].includes(job.status));
-    return { state, dispatch: await band.dispatch(job.job_id, `state:${job.state_version}`, update) };
+    return { state, dispatch: await band.dispatch(job.job_id, `state:${job.state_version}:preparation:${preparationDispatchKey(state)}`, update) };
   }
   const detail = await coordination.getDetail(job.job_id);
   if (detail.runtime === 'band' && input.allowLiveBand === true) {

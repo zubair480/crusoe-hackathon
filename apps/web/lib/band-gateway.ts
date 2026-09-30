@@ -4,6 +4,8 @@ import { dirname, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { BAND_ROLES, ROLE_CONFIG_KEYS, createCrewHandler, decodeEnvelope, encodeEnvelope, type BandRole } from '@thermaldesk/coordination';
 import type { createCoordinationPorts } from './coordination-ports';
+import type { RepairPreparation } from './repair-preparation';
+import { createPreparationCrewHandler } from './preparation-crew';
 
 type Ports = ReturnType<typeof createCoordinationPorts>;
 type Room = { job_id: string; room_id: string | null; status: 'creating' | 'ready'; events: Record<string, 'pending' | 'confirmed'> };
@@ -21,7 +23,7 @@ export class BandGateway {
   private rooms: Record<string, Room> = {};
   private activeJob: string | null = null;
   private startFlight: Promise<void> | null = null;
-  constructor(readonly directory: string, readonly ports: Ports, readonly configPath = bandConfigPath()) {}
+  constructor(readonly directory: string, readonly ports: Ports, readonly configPath = bandConfigPath(), readonly preparation?: Pick<RepairPreparation, 'runRole'>) {}
   private get file() { return join(this.directory, 'band-rooms.json'); }
   private async load() {
     try { this.rooms = JSON.parse(await readFile(this.file, 'utf8')); }
@@ -34,9 +36,9 @@ export class BandGateway {
   }
   async status() {
     await this.load();
-    return { configured: existsSync(this.configPath), connected: this.agents.size === BAND_ROLES.length,
+    return { configured: existsSync(this.configPath), connected: BAND_ROLES.every(role => this.agents.get(role)?.isRunning === true),
       active_job_id: this.activeJob, agents: BAND_ROLES.map(name => ({ name, connected: this.agents.get(name)?.isRunning ?? false })),
-      rooms: Object.values(this.rooms), business_actions: 'simulated', schedule: 'local_workbook' };
+      rooms: Object.values(this.rooms), business_actions: this.preparation ? 'research_and_drafts_only' : 'simulated', schedule: 'local_workbook' };
   }
   async check() {
     const sdk = await import('@band-ai/sdk');
@@ -67,7 +69,7 @@ export class BandGateway {
     this.activeJob = jobId;
     try {
       for (const role of BAND_ROLES) {
-        const handler = createCrewHandler(role, { context: this.ports.context, adapters });
+        const handler = this.preparation ? createPreparationCrewHandler(role, this.preparation) : createCrewHandler(role, { context: this.ports.context, adapters });
         const config = sdk.loadAgentConfig(ROLE_CONFIG_KEYS[role], this.configPath);
         const agent = sdk.Agent.create({
           config, logger: new NoopLogger(),
@@ -102,31 +104,37 @@ export class BandGateway {
   }
   /** Persist intent before every remote mutation; uncertain sends are never repeated automatically. */
   async dispatch(jobId: string, eventKey: string, update = false) {
-    await this.start(jobId);
+    if (this.activeJob && this.activeJob !== jobId) throw new Error('Stop the current Band crew before switching jobs.');
     await mkdir(this.directory, { recursive: true });
     const lock = await open(`${this.file}.lock`, 'wx').catch(() => { throw new Error('Band dispatch is busy; refresh its status.'); });
     try {
       await this.load();
       let room = this.rooms[jobId];
-      const sender = this.agents.get('ScheduleReporter')!.runtime.link.rest;
+      const sdk = await import('@band-ai/sdk');
+      const { NoopLogger } = await import('@band-ai/sdk/core');
+      const sender = new sdk.BandLink({ ...sdk.loadAgentConfig('schedule_reporter', this.configPath), logger: new NoopLogger() }).rest;
       if (!room) {
+        if (!(await this.check()).every(agent => agent.verified)) throw new Error('Band agent identity verification failed.');
+        // Create and persist the room before connecting the crew. Otherwise the
+        // creator's room_added event can fail roomFilter before its ID is saved.
+        await this.stop();
         room = this.rooms[jobId] = { job_id: jobId, room_id: null, status: 'creating', events: {} };
         await this.save();
         const created = await sender.createChat(undefined, { maxRetries: 0, timeoutInSeconds: 15 });
         room.room_id = created.id;
         await this.save();
-        const sdk = await import('@band-ai/sdk');
         const coordinator = sdk.loadAgentConfig('repair_coordinator', this.configPath);
         await sender.addChatParticipant(created.id, { participantId: coordinator.agentId, role: 'member' }, { maxRetries: 0, timeoutInSeconds: 15 });
         room.status = 'ready'; await this.save();
-        await this.agents.get('RepairCoordinator')!.runtime.link.subscribeRoom(created.id);
       }
+      if (!room.room_id || room.status !== 'ready') throw new Error('Band room setup has an uncertain outcome; review the saved room reference before retrying.');
+      await this.start(jobId);
+      room = this.rooms[jobId]; // Startup reloads persisted room objects.
       if (!room.room_id || room.status !== 'ready') throw new Error('Band room setup has an uncertain outcome; review the saved room reference before retrying.');
       if (room.events[eventKey]) return { room_id: room.room_id, status: room.events[eventKey], duplicate: true };
       room.events[eventKey] = 'pending'; await this.save();
-      const sdk = await import('@band-ai/sdk');
       const coordinator = sdk.loadAgentConfig('repair_coordinator', this.configPath);
-      const content = encodeEnvelope(`${update ? 'Update' : 'Coordinate'} ${jobId}. Business actions are simulated; Excel is a real local file.`,
+      const content = encodeEnvelope(`${update ? 'Update' : 'Coordinate'} ${jobId}. ${this.preparation ? 'Prepare supplier research, quote checks and email drafts only. Nothing is purchased, sent or booked.' : 'Business actions are simulated; Excel is a real local file.'}`,
         update ? { kind: 'job_event', job_id: jobId, requested_by: 'ScheduleReporter', what: eventKey }
           : { kind: 'kickoff', job_id: jobId, requested_by: 'ScheduleReporter' });
       await sender.createChatMessage(room.room_id, { content, mentions: [{ id: coordinator.agentId, name: 'RepairCoordinator' }] }, { maxRetries: 0, timeoutInSeconds: 15 });

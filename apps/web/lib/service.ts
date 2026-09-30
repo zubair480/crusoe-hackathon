@@ -2,12 +2,22 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { unlink } from 'node:fs/promises';
 import { assertContract, type Evidence } from '@thermaldesk/contracts';
+import { collectCompletionEvidence, type TranscriptInput } from '@thermaldesk/intake';
 import { readSchedule, syncSchedule } from '@thermaldesk/excel';
 import { CaseStore, seed } from './store';
 import { demoPorts, reviewableDemoScope } from './demo-ports';
 import { createAnalysisPorts } from './analysis-ports';
 import { createCoordinationPorts } from './coordination-ports';
-import type { CaseState, CommandInput, TeamPorts } from './model';
+import type { CaseState, CommandInput, TeamPorts, CompletionEvidence } from './model';
+
+export interface CompletionSubmission {
+  expectedRevision: number;
+  technician_id: string;
+  reported_status: CompletionEvidence['reported_status'];
+  comments: string;
+  transcript: TranscriptInput;
+  attachments: Evidence[];
+}
 
 export class CaseService {
   readonly workbookPath: string;
@@ -164,6 +174,44 @@ export class CaseService {
   }
   async addEvidence(evidence: Evidence, revision: number): Promise<CaseState> {
     return this.addEvidenceBatch([evidence], revision);
+  }
+  async submitUploadedCompletion(input: CompletionSubmission): Promise<CaseState> {
+    return this.store.update(async state => {
+      if (input.expectedRevision !== state.revision) throw new Error('Case changed. Refresh before uploading again.');
+      let job = state.job;
+      if (!job) throw new Error('Create and schedule a repair job before submitting completion evidence.');
+      if (this.ports.refreshJob) job = await this.ports.refreshJob(job);
+      if (!['scheduled', 'in_progress', 'awaiting_verification'].includes(job.status)) throw new Error('A booked or active job is required for completion evidence.');
+      const completion = collectCompletionEvidence({
+        case_id: job.case_id, site_id: job.site_id, asset_id: job.asset_id, job_id: job.job_id,
+        completion_id: state.completion?.completion_id,
+        version: (state.completion?.version ?? 0) + 1,
+        technician_id: input.technician_id, reported_status: input.reported_status,
+        comments: input.comments, transcript: input.transcript, attachments: input.attachments,
+      });
+      state.job = await this.ports.submitCompletion(job, completion);
+      state.completion = completion;
+      state.verification = null;
+      state.events.push({ id: randomUUID(), at: new Date().toISOString(), title: 'Completion evidence uploaded',
+        detail: `Completion version ${completion.version}: ${completion.evidence.length} locally stored evidence items. Previous verification invalidated; comparison and a separate review are required.`, mode: 'live' });
+      // Persist the evidence even if a downstream workbook operation is unavailable.
+      try {
+        if (this.ports.syncJobSchedule) {
+          state.job = await this.ports.syncJobSchedule(state.job);
+          state.schedule = await this.ports.readScheduleSnapshot!();
+        } else {
+          const result = await syncSchedule({ workbookPath: this.workbookPath, job: state.job,
+            idempotencyKey: `schedule:${state.job.job_id}:${state.job.state_version}`, expectedFingerprint: state.schedule.fingerprint });
+          state.job.actions.push(result);
+          if (result.status === 'confirmed') state.schedule = await readSchedule(this.workbookPath);
+        }
+      } catch {
+        state.events.push({ id: randomUUID(), at: new Date().toISOString(), title: 'Excel update needs attention',
+          detail: 'Completion evidence is saved. Retry the schedule update before relying on the workbook.', mode: 'live' });
+      }
+      state.revision++;
+      return { state, result: state };
+    });
   }
   async addEvidenceBatch(evidence: Evidence[], revision: number): Promise<CaseState> {
     if (!evidence.length) throw new Error('At least one evidence item is required.');

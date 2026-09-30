@@ -13,6 +13,7 @@ export interface CaseState {
   schedule: ScheduleSnapshot;
   events: Event[];
   scenarioLoaded: boolean;
+  preparation?: import('./repair-preparation').PreparationState;
 }
 export type Command = 'analyze' | 'load_demo_scope' | 'approve_scope' | 'coordinate' | 'sync_schedule' | 'reconcile_schedule' | 'notify_manager' | 'cancel_technician' | 'complete' | 'wrong_asset' | 'incomplete' | 'verify' | 'approve_closure' | 'reset_demo';
 export interface CommandInput { command: Command; expectedRevision: number; reviewer?: string; expectedWorkbookFingerprint?: string }
